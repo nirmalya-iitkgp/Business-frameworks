@@ -1,0 +1,2523 @@
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ */
+
+import React, { useState, useRef, useEffect } from 'react';
+import html2canvas from 'html2canvas';
+import { motion, AnimatePresence } from 'motion/react';
+import { 
+  ChevronRight, 
+  ChevronLeft, 
+  Plus, 
+  Trash2, 
+  Layout, 
+  Info, 
+  Maximize, 
+  Minimize, 
+  Share2, 
+  Hand, 
+  Pointer,
+  Search,
+  Settings,
+  Bell,
+  ArrowRightLeft,
+  ArrowRight,
+  Download
+} from 'lucide-react';
+import { FRAMEWORKS, COLORS } from './constants';
+import { Framework, StickyNote, FrameworkSection } from './types';
+
+export default function App() {
+  const [selectedFramework, setSelectedFramework] = useState<Framework | null>(null);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [notes, setNotes] = useState<StickyNote[]>([]);
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+  const [activeTool, setActiveTool] = useState<'pointer' | 'pan'>('pointer');
+  const [activeDetailSection, setActiveDetailSection] = useState<string | null>(null);
+  const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
+
+  useEffect(() => {
+    const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isMobile = windowSize.width < 768;
+  const exportRef = useRef<HTMLDivElement>(null);
+
+  const exportToPng = async () => {
+    if (!exportRef.current || !selectedFramework) return;
+    
+    // Create a temporary container to fix scaling issues with html2canvas and CSS transforms
+    const element = exportRef.current;
+    
+    try {
+      const canvas = await html2canvas(element, {
+        backgroundColor: '#ffffff',
+        scale: 2,
+        logging: false,
+        useCORS: true,
+        windowWidth: element.scrollWidth,
+        windowHeight: element.scrollHeight
+      });
+      
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.download = `modern-chanakya-${selectedFramework.name.toLowerCase().replace(/\s+/g, '-')}.png`;
+      link.href = dataUrl;
+      link.click();
+    } catch (err) {
+      console.error('Export failed:', err);
+    }
+  };
+  
+  // Matrix Simulation States
+  const [matrixValues, setMatrixValues] = useState<Record<string, number>>({
+    price: 50,
+    quality: 50,
+    marketing: 50
+  });
+
+  const handleMatrixChange = (key: string, value: number) => {
+    setMatrixValues(prev => ({ ...prev, [key]: value }));
+  };
+  
+  const addNote = (sectionId?: string) => {
+    const newNote: StickyNote = {
+      id: Math.random().toString(36).substr(2, 9),
+      text: 'New thought...',
+      color: COLORS[Math.floor(Math.random() * COLORS.length)],
+      x: window.innerWidth / 2 - 75 + (Math.random() * 40 - 20),
+      y: window.innerHeight / 2 - 75 + (Math.random() * 40 - 20),
+      sectionId
+    };
+    setNotes([...notes, newNote]);
+  };
+
+  const updateNote = (id: string, updates: Partial<StickyNote>) => {
+    setNotes(notes.map(n => n.id === id ? { ...n, ...updates } : n));
+  };
+
+  const deleteNote = (id: string) => {
+    setNotes(notes.filter(n => n.id !== id));
+  };
+
+  const handleZoom = (delta: number) => {
+    setZoom(prev => Math.min(Math.max(prev + delta, 0.5), 2));
+  };
+
+  const filteredFrameworks = FRAMEWORKS.filter(f => 
+    f.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+    f.category.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  return (
+    <div className="flex h-screen w-screen flex-col bg-[#F8F9FA] text-slate-900 font-sans overflow-hidden">
+      {/* Header */}
+      <header className="h-14 border-b border-slate-200 bg-white flex items-center justify-between px-6 shrink-0 z-40">
+        <div className="flex items-center gap-3 cursor-pointer" onClick={() => setSelectedFramework(null)}>
+          <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-orange-600 rounded flex items-center justify-center text-white font-black shadow-lg shadow-orange-100">
+            MC
+          </div>
+          <h1 className="font-black text-lg tracking-tight uppercase italic flex items-center">
+            Modern <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-600 ml-1">Chanakya</span>
+          </h1>
+        </div>
+        
+        <div className="flex items-center gap-4">
+          <div className="relative hidden md:block">
+            <input 
+              type="text" 
+              placeholder="Search 200+ frameworks..." 
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-48 lg:w-80 h-9 pl-9 pr-4 text-sm bg-slate-100 border-transparent rounded-md focus:bg-white focus:ring-1 focus:ring-indigo-500 transition-all outline-none"
+            />
+            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+          </div>
+          {selectedFramework && (
+            <button 
+              onClick={exportToPng}
+              className="h-9 px-3 md:px-4 bg-emerald-600 text-white text-[10px] md:text-xs font-bold rounded hover:bg-emerald-700 transition-colors uppercase tracking-wider whitespace-nowrap flex items-center gap-2 shadow-sm"
+            >
+              <Download size={14} /> EXPORT PNG
+            </button>
+          )}
+        </div>
+      </header>
+
+      <div className="flex-1 flex overflow-hidden">
+        {/* Sidebar */}
+        <AnimatePresence>
+          {(isSidebarOpen || !isMobile) && (
+            <motion.aside
+              initial={isMobile ? { x: -300, opacity: 0 } : { width: 0, opacity: 0 }}
+              animate={isMobile ? { x: isSidebarOpen ? 0 : -300, opacity: 1 } : { width: isSidebarOpen ? 224 : 0, opacity: 1 }}
+              exit={isMobile ? { x: -300, opacity: 0 } : { width: 0, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+              className={`fixed md:relative z-50 md:z-30 h-full border-r border-slate-200 bg-white ${isMobile && !isSidebarOpen ? 'hidden' : ''}`}
+            >
+              <div className="flex h-full flex-col overflow-hidden w-64 md:w-56">
+                <div className="p-4 flex items-center justify-between md:hidden">
+                  <span className="font-bold">Menu</span>
+                  <button onClick={() => setIsSidebarOpen(false)} className="p-2 border border-slate-100 rounded-lg hover:bg-slate-50">
+                    <ChevronLeft size={20} />
+                  </button>
+                </div>
+                <nav className="p-4 flex-1 space-y-4 overflow-y-auto">
+              <div className="flex items-center justify-between px-3">
+                <div className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">Navigation</div>
+              </div>
+
+              {Array.from(new Set(FRAMEWORKS.map(f => f.category))).map(category => (
+                <div key={category} className="space-y-1">
+                  <div className="px-3 py-1 text-[9px] font-black text-slate-300 uppercase tracking-tighter border-b border-slate-50 mb-1">{category}</div>
+                  {filteredFrameworks.filter(f => f.category === category).map((f) => (
+                    <button
+                      key={f.id}
+                      onClick={() => setSelectedFramework(f)}
+                      className={`flex w-full items-center justify-between px-3 py-1.5 text-[11px] rounded transition-all ${
+                        selectedFramework?.id === f.id 
+                          ? 'bg-indigo-50 text-indigo-700 font-bold' 
+                          : 'text-slate-600 hover:bg-slate-50'
+                      }`}
+                    >
+                      <span className="truncate">{f.name}</span>
+                      {selectedFramework?.id === f.id && <ChevronRight size={12} />}
+                    </button>
+                  ))}
+                </div>
+              ))}
+            </nav>
+
+            <div className="p-4 border-t border-slate-100">
+              <div className="bg-slate-900 rounded-lg p-3 shadow-inner">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Contextual Info</span>
+                </div>
+                <p className="text-[10px] leading-tight text-slate-300 font-medium">
+                  {selectedFramework 
+                    ? selectedFramework.description 
+                    : "Select a framework to view its strategic profile and interactive visualization."}
+                </p>
+                {selectedFramework && (
+                  <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between">
+                    <span className="text-[8px] font-bold text-indigo-400 uppercase">{selectedFramework.category}</span>
+                    <span className="text-[8px] font-bold text-slate-500 uppercase">{selectedFramework.layout}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </motion.aside>
+      )}
+    </AnimatePresence>
+
+        {/* Workspace */}
+        <main className="relative flex-1 overflow-hidden flex flex-col">
+          {/* Detail Overlay */}
+          <AnimatePresence>
+            {activeDetailSection && (
+              <motion.div
+                initial={{ opacity: 0, x: 100 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: 100 }}
+                className="absolute right-0 top-0 bottom-0 z-50 w-80 border-l border-slate-200 bg-white shadow-2xl p-6 overflow-y-auto"
+              >
+                <div className="flex items-center justify-between mb-6">
+                  <h3 className="font-bold text-lg text-slate-800 border-b-2 border-indigo-500 pb-2">
+                    {activeDetailSection}
+                  </h3>
+                  <button 
+                    onClick={() => setActiveDetailSection(null)}
+                    className="p-2 hover:bg-slate-100 rounded-lg text-slate-400"
+                  >
+                    <ChevronRight size={20} />
+                  </button>
+                </div>
+                
+                {selectedFramework?.sections.find(s => s.name === activeDetailSection)?.tips && (
+                  <div className="bg-slate-50 rounded-xl p-4 mb-6 border border-slate-200">
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Strategic Principle</span>
+                    </div>
+                    <p className="text-xs leading-relaxed text-slate-600 italic">
+                      "{selectedFramework?.sections.find(s => s.name === activeDetailSection)?.tips}"
+                    </p>
+                  </div>
+                )}
+
+                <div className="space-y-4">
+                  <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Key Considerations</p>
+                  <ul className="space-y-3">
+                    {selectedFramework?.sections.find(s => s.name === activeDetailSection)?.details.map((detail, idx) => (
+                      <motion.li 
+                        initial={{ opacity: 0, x: 10 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        transition={{ delay: idx * 0.1 }}
+                        key={idx} 
+                        className="flex items-center gap-3 text-xs text-slate-600 group"
+                      >
+                        <div className="w-1.5 h-1.5 rounded-full bg-indigo-400 group-hover:scale-150 transition-transform" />
+                        {detail}
+                      </motion.li>
+                    ))}
+                  </ul>
+                </div>
+
+                {/* Matrix Simulation Controller */}
+                {(selectedFramework?.id === '4ps' || selectedFramework?.id === '4cs') && (
+                  <div className="mt-10 pt-10 border-t border-slate-100 space-y-6">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-slate-400">Market Dynamics Simulator</p>
+                    <div className="space-y-4">
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <label className="text-[10px] font-bold text-slate-500 uppercase">Price Point</label>
+                          <span className="text-[10px] font-mono text-indigo-600">{matrixValues.price}%</span>
+                        </div>
+                        <input 
+                          type="range" min="0" max="100" 
+                          value={matrixValues.price}
+                          onChange={(e) => handleMatrixChange('price', parseInt(e.target.value))}
+                          className="w-full accent-indigo-600" 
+                        />
+                      </div>
+                      <div className="p-3 bg-slate-50 rounded-lg">
+                        <p className="text-[9px] text-slate-400 uppercase font-black mb-1">Impact Analysis</p>
+                        <p className="text-[11px] text-slate-600 leading-tight">
+                          {matrixValues.price > 70 
+                            ? "High pricing requires premium Place strategy and specialized Promotion." 
+                            : "Competitive pricing allows for mass-market distribution strategy."}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </motion.div>
+            )}
+          </AnimatePresence>
+
+          {/* Canvas Toolbar */}
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm">
+            <button 
+              onClick={() => setActiveTool('pointer')}
+              className={`rounded p-2 transition-colors ${activeTool === 'pointer' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+            >
+              <Pointer size={16} />
+            </button>
+            <button 
+              onClick={() => setActiveTool('pan')}
+              className={`rounded p-2 transition-colors ${activeTool === 'pan' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+            >
+              <Hand size={16} />
+            </button>
+            <div className="w-px h-4 bg-slate-200 mx-1" />
+            <button onClick={() => handleZoom(-0.1)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><Minimize size={16} /></button>
+            <span className="text-[10px] font-mono font-bold text-slate-400 px-1">{Math.round(zoom * 100)}%</span>
+            <button onClick={() => handleZoom(0.1)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><Maximize size={16} /></button>
+          </div>
+
+          {!isSidebarOpen && (
+            <button
+              onClick={() => setIsSidebarOpen(true)}
+              className="absolute left-4 top-4 z-30 rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50 md:hidden"
+            >
+              <Layout size={16} />
+            </button>
+          )}
+
+          {/* Canvas Area */}
+          <div 
+            className="canvas-grid flex-1 relative cursor-crosshair overflow-hidden"
+            onWheel={(e) => {
+              if (e.ctrlKey) {
+                setZoom(prev => Math.min(Math.max(prev - e.deltaY * 0.001, 0.5), 2));
+                e.preventDefault();
+              }
+            }}
+          >
+            <AnimatePresence mode="wait">
+              {!selectedFramework ? (
+                <motion.div
+                  key="hero"
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  exit={{ opacity: 0, scale: 0.95 }}
+                  className="absolute inset-0 overflow-y-auto bg-white p-6 md:p-12 lg:p-20"
+                >
+                  <div className="max-w-6xl mx-auto min-h-full flex flex-col justify-center">
+                    <div className="flex flex-col md:flex-row items-center md:items-start justify-between gap-8 mb-12">
+                      <div className="space-y-4 text-center md:text-left">
+                        <motion.div 
+                          initial={{ opacity: 0, x: -20 }}
+                          animate={{ opacity: 1, x: 0 }}
+                          transition={{ delay: 0.2 }}
+                          className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-indigo-50 border border-indigo-100 text-indigo-600 text-[10px] font-black uppercase tracking-widest"
+                        >
+                          <Bell size={12} fill="currentColor" /> Modern Chanakya Executive Suite
+                        </motion.div>
+                        <h2 className="text-4xl md:text-5xl lg:text-7xl font-black text-slate-900 tracking-tighter leading-[0.95]">
+                          Master the Art of Strategy,<br/>
+                          <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-600 italic">The Chanakya Way.</span>
+                        </h2>
+                        <p className="text-base md:text-xl text-slate-500 max-w-2xl leading-relaxed mx-auto md:mx-0 font-medium">
+                          Access over 100+ professional frameworks for strategy, innovation, problem-solving, and change management. All visualizations are fully interactive and research-backed.
+                        </p>
+                      </div>
+                      <div className="text-right hidden lg:block">
+                        <div className="text-[40px] font-black text-slate-100 leading-none uppercase tracking-tighter">
+                          Platform<br/>v.2.0.4
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4 md:gap-8">
+                      {Array.from(new Set(FRAMEWORKS.map(f => f.category))).slice(0, 6).map((cat, idx) => (
+                        <motion.div
+                          key={cat}
+                          initial={{ opacity: 0, y: 20 }}
+                          animate={{ opacity: 1, y: 0 }}
+                          transition={{ delay: 0.3 + idx * 0.1 }}
+                          className="group p-8 rounded-3xl border border-slate-100 bg-slate-50/50 hover:bg-white hover:shadow-[0_32px_64px_-16px_rgba(79,70,229,0.1)] transition-all cursor-pointer border-b-4 hover:border-b-indigo-500"
+                          onClick={() => {
+                            const firstInCat = FRAMEWORKS.find(f => f.category === cat);
+                            if (firstInCat) setSelectedFramework(firstInCat);
+                          }}
+                        >
+                          <div className="flex items-center justify-between mb-6">
+                            <div className="px-2 py-0.5 rounded bg-white text-[10px] font-black text-indigo-600 uppercase tracking-widest shadow-sm ring-1 ring-slate-200">{cat}</div>
+                            <div className="w-8 h-8 rounded-full bg-white border border-slate-100 flex items-center justify-center shadow-sm group-hover:scale-110 transition-transform">
+                              <ChevronRight size={16} className="text-slate-300 group-hover:text-indigo-600 transition-colors" />
+                            </div>
+                          </div>
+                          <h4 className="text-2xl font-bold text-slate-900 mb-3 tracking-tight">
+                            {FRAMEWORKS.filter(f => f.category === cat).length} Strategic Tools
+                          </h4>
+                          <p className="text-sm text-slate-500 leading-relaxed font-medium">
+                            Structured tools for {cat.toLowerCase()} analysis, planning, and execution.
+                          </p>
+                          <div className="mt-8 flex items-center justify-between">
+                            <div className="flex -space-x-2">
+                              {FRAMEWORKS.filter(f => f.category === cat).slice(0, 4).map((f, i) => (
+                                  <div key={i} className="w-10 h-10 rounded-xl bg-white border border-slate-200 flex items-center justify-center text-[10px] font-bold text-slate-400 shadow-sm ring-4 ring-slate-50/50 group-hover:ring-white transition-all">
+                                    {f.name.charAt(0)}
+                                  </div>
+                              ))}
+                            </div>
+                            <span className="text-[10px] font-bold text-slate-300 group-hover:text-indigo-600 uppercase tracking-widest transition-colors">Explore Category</span>
+                          </div>
+                        </motion.div>
+                      ))}
+                    </div>
+
+                    <div className="mt-12 md:mt-24 pt-12 border-t border-slate-100 flex flex-col lg:flex-row items-center lg:items-end justify-between gap-12">
+                      <div className="flex flex-wrap justify-center lg:justify-start items-center gap-8 md:gap-16">
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Active Users</span>
+                          <span className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter">14.2k</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Frameworks</span>
+                          <span className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter">{FRAMEWORKS.length}</span>
+                        </div>
+                        <div className="flex flex-col">
+                          <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Decisions Made</span>
+                          <span className="text-2xl md:text-3xl font-black text-slate-900 tracking-tighter">1.4M+</span>
+                        </div>
+                      </div>
+                      <div className="flex flex-col items-center lg:items-end gap-2">
+                         <div className="flex items-center gap-1.5 px-3 py-1 bg-slate-900 rounded text-white text-[8px] font-bold tracking-[0.2em] uppercase">
+                            Enterprise Ready <motion.div animate={{ opacity: [1, 0.4, 1] }} transition={{ duration: 1, repeat: Infinity }} className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+                         </div>
+                         <div className="text-[10px] font-bold text-slate-400">
+                           DESIGNED BY <span className="text-slate-900">NIRMALYA PANIGRAHI</span>
+                         </div>
+                      </div>
+                    </div>
+                  </div>
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="canvas"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  className="h-full w-full"
+                  style={{ 
+                    scale: zoom,
+                    x: pan.x,
+                    y: pan.y,
+                    transformOrigin: '50% 50%'
+                  }}
+                  drag={activeTool === 'pan'}
+                  onDrag={(e, info) => {
+                    if (activeTool === 'pan') {
+                      setPan(prev => ({ x: prev.x + info.delta.x, y: prev.y + info.delta.y }));
+                    }
+                  }}
+                >
+                  <div className={`flex h-full w-full items-center justify-center ${isMobile ? 'p-4' : 'p-20'}`}>
+                    <div ref={exportRef} className="w-full min-h-max bg-white p-12 rounded-3xl shadow-sm flex items-center justify-center scale-[0.6] sm:scale-100 origin-center transition-transform">
+                       <FrameworkVisualizer 
+                        framework={selectedFramework} 
+                        notes={notes} 
+                        onNoteDelete={deleteNote}
+                        onNoteUpdate={updateNote}
+                        onAddNote={(sectionId) => addNote(sectionId)}
+                        onSectionClick={(sectionName) => setActiveDetailSection(sectionName)}
+                        matrixValues={matrixValues}
+                        isMobile={isMobile}
+                      />
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </div>
+        </main>
+      </div>
+
+      {/* Ticker Tape Footer */}
+      <footer className="h-8 border-t border-slate-200 bg-white overflow-hidden flex items-center shrink-0">
+        <motion.div 
+          animate={{ x: ["100%", "-100%"] }}
+          transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
+          className="whitespace-nowrap flex items-center gap-12 text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]"
+        >
+          <span>LEGAL DISCLAIMER: ALL STRATEGY FRAMEWORKS PROVIDED ARE FOR EDUCATIONAL AND PLANNING PURPOSES ONLY</span>
+          <span>SYSTEMS DO NOT GUARANTEE MARKET OUTCOMES OR FINANCIAL RESULTS</span>
+          <span>MODERN CHANAKYA PLATFORM IS NOT LIABLE FOR BUSINESS DECISIONS MADE BASED ON THESE VISUALIZATIONS</span>
+          <span>CONSULT WITH LEGAL AND FINANCIAL ADVISORS BEFORE IMPLEMENTING MAJOR STRATEGIC SHIFTS</span>
+          <span>INTERNAL USE ONLY</span>
+          <span>BUILT BY NIRMALYA PANIGRAHI</span>
+          {/* Duplicate for seamless loop */}
+          <span>LEGAL DISCLAIMER: ALL STRATEGY FRAMEWORKS PROVIDED ARE FOR EDUCATIONAL AND PLANNING PURPOSES ONLY</span>
+          <span>SYSTEMS DO NOT GUARANTEE MARKET OUTCOMES OR FINANCIAL RESULTS</span>
+          <span>MODERN CHANAKYA PLATFORM IS NOT LIABLE FOR BUSINESS DECISIONS MADE BASED ON THESE VISUALIZATIONS</span>
+        </motion.div>
+      </footer>
+    </div>
+  );
+}
+
+const FrameworkVisualizer: React.FC<{ 
+  framework: Framework; 
+  notes: StickyNote[]; 
+  onNoteDelete: (id: string) => void;
+  onNoteUpdate: (id: string, updates: Partial<StickyNote>) => void;
+  onAddNote: (sectionId: string) => void;
+  onSectionClick: (sectionName: string) => void;
+  matrixValues: Record<string, number>;
+  isMobile?: boolean;
+}> = ({ 
+  framework, 
+  notes, 
+  onNoteDelete, 
+  onNoteUpdate,
+  onAddNote,
+  onSectionClick,
+  matrixValues,
+  isMobile = false
+}) => {
+  const renderLayout = () => {
+    switch (framework.layout) {
+      case 'grid':
+        return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-2 gap-4 md:gap-8'} min-h-[60vh]`}>
+            {framework.sections.map((section) => {
+              // Apply simulation effects for 4Ps/4Cs
+              const isPrice = section.id === 'Price' || section.id === 'Cost';
+              const scale = isPrice ? 0.95 + (matrixValues.price / 500) : 1;
+              const opacity = isPrice ? 0.5 + (matrixValues.price / 200) : 1;
+
+              return (
+                <SectionBox 
+                  key={section.id} 
+                  title={section.name} 
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  style={{ transform: `scale(${scale})`, opacity }}
+                />
+              );
+            })}
+          </div>
+        );
+      case 'funnel':
+        return (
+          <div className="flex flex-col w-full max-w-3xl gap-4 items-center min-h-[60vh]">
+             {framework.sections.map((section, idx) => {
+                const width = 100 - (idx * 20);
+                return (
+                  <SectionBox 
+                    key={section.id} 
+                    title={section.name} 
+                    className="rounded-3xl border border-indigo-100 bg-white/50 shadow-sm flex items-center justify-center overflow-hidden"
+                    style={{ width: `${width}%`, flex: 1 }}
+                    notes={notes.filter(n => n.sectionId === section.id)}
+                    onAddNote={() => onAddNote(section.id)}
+                    onNoteDelete={onNoteDelete}
+                    onNoteUpdate={onNoteUpdate}
+                    onClick={() => onSectionClick(section.name)}
+                    framework={framework}
+                  />
+                );
+             })}
+          </div>
+        );
+      case 'circles':
+        return (
+          <div className={`relative flex items-center justify-center aspect-square mx-auto ${isMobile ? 'w-[95vw]' : 'w-[min(90vw,80vh)] max-w-2xl'}`}>
+            {framework.sections.map((section, idx) => {
+              const size = 100 - (idx * (isMobile ? 15 : 20));
+              return (
+                <div 
+                  key={section.id}
+                  className="absolute rounded-full border border-indigo-100 bg-white/20 shadow-inner flex flex-col items-center pt-6 cursor-pointer hover:bg-white/30 transition-colors"
+                  style={{ 
+                    width: `${size}%`, 
+                    height: `${size}%`,
+                    zIndex: framework.sections.length - idx
+                  }}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSectionClick(section.name);
+                  }}
+                >
+                  <span className="font-sans font-bold text-indigo-300 tracking-[0.3em] uppercase text-[9px] mb-2">{section.name}</span>
+                  <div className="flex flex-wrap justify-center gap-1.5 px-6">
+                    {notes.filter(n => n.sectionId === section.id).map(note => (
+                       <StickyNoteCard 
+                        key={note.id} 
+                        note={note} 
+                        onDelete={() => onNoteDelete(note.id)}
+                        onUpdate={(u) => onNoteUpdate(note.id, u)}
+                        sections={framework.sections}
+                        compact
+                       />
+                    ))}
+                    <button 
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onAddNote(section.id);
+                      }}
+                      className="h-8 w-8 rounded-full border border-dashed border-indigo-200 flex items-center justify-center text-indigo-300 hover:bg-indigo-50 transition-colors"
+                    >
+                      <Plus size={14} />
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        );
+      case 'columns':
+        return (
+          <div className="flex flex-col md:flex-row w-full max-w-6xl gap-4 md:gap-8 min-h-[60vh]">
+            {framework.sections.map((section) => (
+              <SectionBox 
+                key={section.id} 
+                title={section.name} 
+                className="flex-1"
+                notes={notes.filter(n => n.sectionId === section.id)}
+                onAddNote={() => onAddNote(section.id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(section.name)}
+                framework={framework}
+              />
+            ))}
+          </div>
+        );
+      case 'linear':
+        return (
+          <div className="flex flex-col md:flex-row w-full max-w-6xl items-center gap-4 min-h-[40vh]">
+             {framework.sections.map((section, idx) => (
+               <React.Fragment key={section.id}>
+                  <SectionBox 
+                    title={section.name} 
+                    className="flex-1 w-full h-full"
+                    notes={notes.filter(n => n.sectionId === section.id)}
+                    onAddNote={() => onAddNote(section.id)}
+                    onNoteDelete={onNoteDelete}
+                    onNoteUpdate={onNoteUpdate}
+                    onClick={() => onSectionClick(section.name)}
+                    framework={framework}
+                  />
+                  {idx < framework.sections.length - 1 && (
+                    <div className="text-slate-300 rotate-90 md:rotate-0">
+                       <ChevronRight size={24} strokeWidth={1} />
+                    </div>
+                  )}
+               </React.Fragment>
+             ))}
+          </div>
+        );
+      case 'staircase':
+        return (
+          <div className="flex flex-col md:flex-row w-full max-w-6xl items-end gap-3 md:gap-6 min-h-[60vh]">
+             {framework.sections.map((section, idx) => (
+               <SectionBox 
+                key={section.id}
+                title={section.name} 
+                className="flex-1 w-full"
+                style={{ height: !isMobile ? `${(idx + 1) * 20 + 20}%` : 'auto' }}
+                notes={notes.filter(n => n.sectionId === section.id)}
+                onAddNote={() => onAddNote(section.id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(section.name)}
+                framework={framework}
+              />
+             ))}
+          </div>
+        );
+      case 'radial':
+      case 'flower':
+        return (
+          <div className={`relative aspect-square flex items-center justify-center ${isMobile ? 'w-[95vw]' : 'w-[min(90vw,80vh)]'}`}>
+            {/* Center Circle */}
+            <div className="z-10 h-24 w-24 md:h-36 md:w-36 rounded-full bg-indigo-600 text-white shadow-2xl flex items-center justify-center p-4 md:p-6 text-center flex-col">
+               <span className="text-[6px] md:text-[8px] font-bold uppercase tracking-widest opacity-70 mb-1">Brand</span>
+               <span className="font-bold text-[10px] md:text-xs leading-tight uppercase tracking-tight">Core Essence</span>
+            </div>
+            
+            {/* Spokes/Petals */}
+            {framework.sections.map((section, idx) => {
+              const angle = (idx / framework.sections.length) * 2 * Math.PI;
+              const radius = !isMobile ? 260 : 130;
+              const x = Math.cos(angle) * radius;
+              const y = Math.sin(angle) * radius;
+              
+              return (
+                <div 
+                  key={section.id}
+                  className="absolute"
+                  style={{ transform: `translate(${x}px, ${y}px)` }}
+                >
+                  <SectionBox 
+                    title={section.name} 
+                    className="w-24 h-32 md:w-36 md:h-40 rounded-xl"
+                    notes={notes.filter(n => n.sectionId === section.id)}
+                    onAddNote={() => onAddNote(section.id)}
+                    onNoteDelete={onNoteDelete}
+                    onNoteUpdate={onNoteUpdate}
+                    onClick={() => onSectionClick(section.name)}
+                    framework={framework}
+                    small
+                  />
+                </div>
+              );
+            })}
+          </div>
+        );
+      case 'pyramid':
+        return (
+          <div className={`flex flex-col items-center justify-center gap-4 w-full max-w-4xl px-4 ${isMobile ? 'scale-90' : ''}`}>
+            <div className="flex flex-col items-center gap-2 w-full">
+              {framework.sections.map((section, idx) => {
+                const width = 100 - ((framework.sections.length - 1 - idx) * (isMobile ? 10 : 15));
+                return (
+                  <div key={section.id} className="w-full" style={{ maxWidth: `${width}%` }}>
+                    <SectionBox 
+                      title={section.name}
+                      notes={notes.filter(n => n.sectionId === section.id)}
+                      onAddNote={() => onAddNote(section.id)}
+                      onNoteDelete={onNoteDelete}
+                      onNoteUpdate={onNoteUpdate}
+                      onClick={() => onSectionClick(section.name)}
+                      framework={framework}
+                      className={`${idx === 0 ? 'rounded-t-3xl' : idx === framework.sections.length - 1 ? 'rounded-b-3xl' : 'rounded-none'} border-indigo-200`}
+                      small={isMobile || idx < 2}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      case 'bmc':
+        return (
+          <div className={`grid w-full gap-4 p-4 ${isMobile ? 'grid-cols-1' : 'md:grid-cols-5 md:grid-rows-3 max-w-7xl min-h-[600px]'}`}>
+            <SectionBox 
+              title={framework.sections[0].name}
+              notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
+              onAddNote={() => onAddNote(framework.sections[0].id)}
+              onNoteDelete={onNoteDelete}
+              onNoteUpdate={onNoteUpdate}
+              onClick={() => onSectionClick(framework.sections[0].name)}
+              framework={framework}
+              className={isMobile ? '' : 'md:row-span-2'}
+            />
+            <div className={`flex flex-col gap-4 ${isMobile ? '' : 'md:row-span-2'}`}>
+              <SectionBox 
+                title={framework.sections[1].name}
+                notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
+                onAddNote={() => onAddNote(framework.sections[1].id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(framework.sections[1].name)}
+                framework={framework}
+                className="flex-1"
+              />
+              <SectionBox 
+                title={framework.sections[2].name}
+                notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
+                onAddNote={() => onAddNote(framework.sections[2].id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(framework.sections[2].name)}
+                framework={framework}
+                className="flex-1"
+              />
+            </div>
+            <SectionBox 
+              title={framework.sections[3].name}
+              notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
+              onAddNote={() => onAddNote(framework.sections[3].id)}
+              onNoteDelete={onNoteDelete}
+              onNoteUpdate={onNoteUpdate}
+              onClick={() => onSectionClick(framework.sections[3].name)}
+              framework={framework}
+              className={isMobile ? 'border-2 border-indigo-200' : 'md:row-span-2 border-2 border-indigo-200'}
+            />
+            <div className={`flex flex-col gap-4 ${isMobile ? '' : 'md:row-span-2'}`}>
+              <SectionBox 
+                title={framework.sections[4].name}
+                notes={notes.filter(n => n.sectionId === framework.sections[4].id)}
+                onAddNote={() => onAddNote(framework.sections[4].id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(framework.sections[4].name)}
+                framework={framework}
+                className="flex-1"
+              />
+              <SectionBox 
+                title={framework.sections[5].name}
+                notes={notes.filter(n => n.sectionId === framework.sections[5].id)}
+                onAddNote={() => onAddNote(framework.sections[5].id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(framework.sections[5].name)}
+                framework={framework}
+                className="flex-1"
+              />
+            </div>
+            <SectionBox 
+              title={framework.sections[6].name}
+              notes={notes.filter(n => n.sectionId === framework.sections[6].id)}
+              onAddNote={() => onAddNote(framework.sections[6].id)}
+              onNoteDelete={onNoteDelete}
+              onNoteUpdate={onNoteUpdate}
+              onClick={() => onSectionClick(framework.sections[6].name)}
+              framework={framework}
+              className={isMobile ? '' : 'md:row-span-2'}
+            />
+            {/* Bottom Row */}
+            <SectionBox 
+              title={framework.sections[7].name}
+              notes={notes.filter(n => n.sectionId === framework.sections[7].id)}
+              onAddNote={() => onAddNote(framework.sections[7].id)}
+              onNoteDelete={onNoteDelete}
+              onNoteUpdate={onNoteUpdate}
+              onClick={() => onSectionClick(framework.sections[7].name)}
+              framework={framework}
+              className={isMobile ? '' : 'md:col-span-2'}
+            />
+             <SectionBox 
+              title={framework.sections[8].name}
+              notes={notes.filter(n => n.sectionId === framework.sections[8].id)}
+              onAddNote={() => onAddNote(framework.sections[8].id)}
+              onNoteDelete={onNoteDelete}
+              onNoteUpdate={onNoteUpdate}
+              onClick={() => onSectionClick(framework.sections[8].name)}
+              framework={framework}
+              className={isMobile ? '' : 'md:col-span-3'}
+            />
+          </div>
+        );
+      case 'map':
+        return (
+          <div className={`relative border border-slate-200 rounded-2xl bg-white p-8 flex flex-col overflow-hidden ${isMobile ? 'w-[95vw] h-auto min-h-[400px]' : 'w-[90vw] h-[600px]'}`}>
+            {/* Wardley Map Axes */}
+            <div className="absolute left-12 top-8 bottom-12 w-px bg-slate-300" />
+            <div className="absolute left-12 right-8 bottom-12 h-px bg-slate-300" />
+            
+            <div className="absolute left-4 top-1/2 -rotate-90 text-[10px] font-bold text-slate-400">VALUE CHAIN</div>
+            <div className="absolute left-1/2 bottom-4 -translate-x-1/2 text-[10px] font-bold text-slate-400">EVOLUTION</div>
+            
+            <div className="absolute inset-x-12 bottom-12 top-8 flex text-[9px] font-bold uppercase tracking-widest text-slate-200 pointer-events-none">
+              <div className="flex-1 border-r border-slate-100 flex items-end justify-center pb-2">Genesis</div>
+              <div className="flex-1 border-r border-slate-100 flex items-end justify-center pb-2">Custom</div>
+              <div className="flex-1 border-r border-slate-100 flex items-end justify-center pb-2">Product</div>
+              <div className="flex-1 flex items-end justify-center pb-2">Utility</div>
+            </div>
+
+            <div className="flex-1 relative">
+                {framework.sections.map((section, idx) => (
+                  <div key={section.id} 
+                    className="absolute p-3 border border-dashed border-slate-200 rounded-lg hover:border-indigo-400 bg-slate-50/50 transition-all cursor-pointer group"
+                    style={{ 
+                        left: `${10 + (idx * 30)}%`, 
+                        top: `${10 + (idx * 25)}%`,
+                        width: '240px'
+                    }}
+                    onClick={() => onSectionClick(section.name)}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{section.name}</span>
+                        <div className="h-5 w-5 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 hover:bg-indigo-600 hover:text-white transition-colors"
+                             onClick={(e) => { e.stopPropagation(); onAddNote(section.id); }}>
+                          <Plus size={12} />
+                        </div>
+                    </div>
+                    <div className="space-y-2">
+                        {notes.filter(n => n.sectionId === section.id).map(note => (
+                            <StickyNoteCard 
+                                key={note.id} 
+                                note={note} 
+                                onDelete={() => onNoteDelete(note.id)}
+                                onUpdate={(u) => onNoteUpdate(note.id, u)}
+                                sections={framework.sections}
+                                compact
+                            />
+                        ))}
+                    </div>
+                  </div>
+                ))}
+            </div>
+          </div>
+        );
+      case 'stage-gate':
+        return (
+          <div className={`flex items-center gap-4 ${isMobile ? 'flex-col min-h-[80vh] w-full overflow-y-auto' : 'h-[60vh] w-[90vw] overflow-x-auto px-8'}`}>
+            {framework.sections.map((section, idx) => (
+              <React.Fragment key={section.id}>
+                <div className="flex flex-col items-center">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Stage {idx + 1}</div>
+                  <SectionBox 
+                    title={section.name} 
+                    className={`${isMobile ? 'w-full' : 'w-56 h-64'} border-2 border-indigo-100`}
+                    notes={notes.filter(n => n.sectionId === section.id)}
+                    onAddNote={() => onAddNote(section.id)}
+                    onNoteDelete={onNoteDelete}
+                    onNoteUpdate={onNoteUpdate}
+                    onClick={() => onSectionClick(section.name)}
+                    framework={framework}
+                  />
+                </div>
+                {idx < framework.sections.length - 1 && (
+                  <div className={`flex flex-col items-center ${isMobile ? 'py-4' : 'pt-8'}`}>
+                    <div className="text-[9px] font-black text-indigo-500 uppercase mb-2">Gate {idx + 1}</div>
+                    <div className="w-16 h-16 bg-white border-2 border-indigo-500 rotate-45 flex items-center justify-center shadow-lg shadow-indigo-100">
+                      <div className="-rotate-45 font-black text-[10px] text-indigo-600">GO?</div>
+                    </div>
+                  </div>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        );
+      case 'diamond':
+        return (
+          <div className={`relative flex items-center justify-center ${isMobile ? 'h-auto w-full flex-col gap-4' : 'h-[80vh] w-[80vh]'}`}>
+            {!isMobile && (
+              <svg className="absolute inset-0 w-full h-full pointer-events-none stroke-slate-200" strokeWidth="2">
+                <line x1="50%" y1="15%" x2="50%" y2="85%" />
+                <line x1="15%" y1="50%" x2="85%" y2="50%" />
+                <line x1="15%" y1="50%" x2="50%" y2="15%" />
+                <line x1="50%" y1="15%" x2="85%" y2="50%" />
+                <line x1="85%" y1="50%" x2="50%" y2="85%" />
+                <line x1="50%" y1="85%" x2="15%" y2="50%" />
+              </svg>
+            )}
+            
+            <div className={`${isMobile ? 'static' : 'absolute inset-0'} flex flex-col items-center justify-center`}>
+              <div className="z-10 bg-white border-2 border-indigo-600 p-4 shadow-xl rounded-lg max-w-[150px] text-center">
+                <span className="text-[8px] font-bold uppercase text-slate-400 block mb-1">Central Change</span>
+                <p className="text-[10px] font-black leading-tight text-slate-800">Identify ripple effects across the diamond nodes.</p>
+              </div>
+            </div>
+
+            <div className={`${isMobile ? 'static w-full' : 'absolute top-[5%] left-1/2 -translate-x-1/2 w-48 h-56'}`}>
+                <SectionBox 
+                  title={framework.sections[0].name}
+                  notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
+                  onAddNote={() => onAddNote(framework.sections[0].id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(framework.sections[0].name)}
+                  framework={framework}
+                  className={`${isMobile ? '' : 'h-full'} border-t-4 border-t-indigo-500`}
+                />
+            </div>
+            <div className={`${isMobile ? 'static w-full' : 'absolute bottom-[5%] left-1/2 -translate-x-1/2 w-48 h-56'}`}>
+                <SectionBox 
+                  title={framework.sections[2].name}
+                  notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
+                  onAddNote={() => onAddNote(framework.sections[2].id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(framework.sections[2].name)}
+                  framework={framework}
+                  className={`${isMobile ? '' : 'h-full'} border-b-4 border-b-indigo-500`}
+                />
+            </div>
+            <div className={`${isMobile ? 'static w-full' : 'absolute left-[5%] top-1/2 -translate-y-1/2 w-48 h-56'}`}>
+                <SectionBox 
+                  title={framework.sections[1].name}
+                  notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
+                  onAddNote={() => onAddNote(framework.sections[1].id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(framework.sections[1].name)}
+                  framework={framework}
+                  className={`${isMobile ? '' : 'h-full'} border-l-4 border-l-indigo-500`}
+                />
+            </div>
+            <div className={`${isMobile ? 'static w-full' : 'absolute right-[5%] top-1/2 -translate-y-1/2 w-48 h-56'}`}>
+                <SectionBox 
+                  title={framework.sections[3].name}
+                  notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
+                  onAddNote={() => onAddNote(framework.sections[3].id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(framework.sections[3].name)}
+                  framework={framework}
+                  className={`${isMobile ? '' : 'h-full'} border-r-4 border-r-indigo-500`}
+                />
+            </div>
+          </div>
+        );
+      case 'double-diamond':
+        return (
+          <div className={`relative flex items-center justify-center ${isMobile ? 'flex-col w-full gap-8' : 'w-[90vw] h-[600px] scale-90 lg:scale-100'}`}>
+            {/* The Two Diamonds Background */}
+            {!isMobile && (
+              <div className="absolute inset-x-8 inset-y-12 flex gap-8 pointer-events-none opacity-20">
+                <div className="flex-1 rotate-45 border-4 border-indigo-500 bg-indigo-50/30" />
+                <div className="flex-1 rotate-45 border-4 border-indigo-500 bg-indigo-50/30" />
+              </div>
+            )}
+
+            <div className="flex-1 w-full flex flex-col gap-8 z-10">
+               <div className={`flex flex-col ${isMobile ? 'gap-8' : 'md:flex-row gap-8'}`}>
+                  <div className="flex-1 flex flex-col gap-4">
+                      <div className="text-center font-black text-indigo-600 text-[10px] uppercase tracking-widest bg-white border border-indigo-100 py-1 rounded shadow-sm">Problem Space</div>
+                      <div className={`flex ${isMobile ? 'flex-col' : 'gap-4'}`}>
+                         <SectionBox 
+                            title={framework.sections[0].name}
+                            notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
+                            onAddNote={() => onAddNote(framework.sections[0].id)}
+                            onNoteDelete={onNoteDelete}
+                            onNoteUpdate={onNoteUpdate}
+                            onClick={() => onSectionClick(framework.sections[0].name)}
+                            framework={framework}
+                            className="flex-1"
+                         />
+                         <SectionBox 
+                            title={framework.sections[1].name}
+                            notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
+                            onAddNote={() => onAddNote(framework.sections[1].id)}
+                            onNoteDelete={onNoteDelete}
+                            onNoteUpdate={onNoteUpdate}
+                            onClick={() => onSectionClick(framework.sections[1].name)}
+                            framework={framework}
+                            className="flex-1 border-r-4 border-r-indigo-500"
+                         />
+                      </div>
+                  </div>
+
+                  <div className="flex-1 flex flex-col gap-4">
+                      <div className="text-center font-black text-indigo-600 text-[10px] uppercase tracking-widest bg-white border border-indigo-100 py-1 rounded shadow-sm">Solution Space</div>
+                      <div className={`flex ${isMobile ? 'flex-col' : 'gap-4'}`}>
+                         <SectionBox 
+                            title={framework.sections[2].name}
+                            notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
+                            onAddNote={() => onAddNote(framework.sections[2].id)}
+                            onNoteDelete={onNoteDelete}
+                            onNoteUpdate={onNoteUpdate}
+                            onClick={() => onSectionClick(framework.sections[2].name)}
+                            framework={framework}
+                            className="flex-1 border-l-4 border-l-indigo-500"
+                         />
+                         <SectionBox 
+                            title={framework.sections[3].name}
+                            notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
+                            onAddNote={() => onAddNote(framework.sections[3].id)}
+                            onNoteDelete={onNoteDelete}
+                            onNoteUpdate={onNoteUpdate}
+                            onClick={() => onSectionClick(framework.sections[3].name)}
+                            framework={framework}
+                            className="flex-1"
+                         />
+                      </div>
+                  </div>
+               </div>
+            </div>
+          </div>
+        );
+      case 'cycle':
+        return (
+          <div className={`relative flex items-center justify-center ${isMobile ? 'w-[95vw] h-[95vw]' : 'h-[80vh] w-[80vh]'}`}>
+            {framework.sections.map((section, idx) => {
+              const angle = (idx * 360) / framework.sections.length;
+              const radian = (angle * Math.PI) / 180;
+              const radius = isMobile ? 120 : 250;
+              const x = Math.cos(radian) * radius;
+              const y = Math.sin(radian) * radius;
+
+              // Calculate arrow position (between this one and next)
+              const nextAngle = ((idx + 1) * 360) / framework.sections.length;
+              const midAngle = (angle + nextAngle) / 2;
+              const midRadian = (midAngle * Math.PI) / 180;
+              const arrowX = Math.cos(midRadian) * radius;
+              const arrowY = Math.sin(midRadian) * radius;
+
+              return (
+                <React.Fragment key={section.id}>
+                  <div
+                    className="absolute"
+                    style={{ transform: `translate(${x}px, ${y}px)` }}
+                  >
+                    <SectionBox 
+                      title={section.name} 
+                      notes={notes.filter(n => n.sectionId === section.id)}
+                      onAddNote={() => onAddNote(section.id)}
+                      onNoteDelete={onNoteDelete}
+                      onNoteUpdate={onNoteUpdate}
+                      onClick={() => onSectionClick(section.name)}
+                      framework={framework}
+                      className={`${isMobile ? 'w-24 h-28' : 'w-40 h-44'} rounded-2xl`}
+                      small={isMobile}
+                    />
+                  </div>
+                  {!isMobile && (
+                    <motion.div
+                      initial={{ opacity: 0 }}
+                      animate={{ opacity: 1 }}
+                      className="absolute text-slate-300"
+                      style={{ 
+                        transform: `translate(${arrowX}px, ${arrowY}px) rotate(${midAngle + 90}deg)` 
+                      }}
+                    >
+                      <ArrowRight size={24} />
+                    </motion.div>
+                  )}
+                </React.Fragment>
+              );
+            })}
+            <div className={`${isMobile ? 'w-20 h-20 text-xs' : 'w-32 h-32 text-xl'} rounded-full border-4 border-dashed border-slate-100 flex items-center justify-center text-slate-300 font-black uppercase tracking-tighter`}>
+                CYCLE
+            </div>
+          </div>
+        );
+      case 'funnel':
+        return (
+          <div className="flex flex-col items-center gap-6 w-[90vw]">
+            {framework.sections.map((section, idx) => (
+              <div 
+                key={section.id} 
+                className="flex items-center gap-8 group"
+                style={{ width: `${100 - (idx * 20)}%` }}
+              >
+                <div className="flex-1">
+                  <SectionBox 
+                    title={`${idx + 1}. ${section.name}`}
+                    notes={notes.filter(n => n.sectionId === section.id)}
+                    onAddNote={() => onAddNote(section.id)}
+                    onNoteDelete={onNoteDelete}
+                    onNoteUpdate={onNoteUpdate}
+                    onClick={() => onSectionClick(section.name)}
+                    framework={framework}
+                    className="border-indigo-100 shadow-lg shadow-indigo-50/50"
+                  />
+                </div>
+                {idx < framework.sections.length - 1 && (
+                  <div className="h-12 flex flex-col items-center justify-center -mb-8">
+                     <div className="w-px h-full bg-indigo-200 border-l border-dashed border-indigo-300" />
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      case 'hype-cycle':
+        return (
+           <div className={`relative border-l-2 border-b-2 border-slate-200 p-8 ${isMobile ? 'w-full h-auto min-h-[400px]' : 'w-[90vw] h-[600px]'}`}>
+              <div className="absolute left-4 top-1/2 -rotate-90 text-[10px] font-black text-slate-400 uppercase tracking-widest">Expectations</div>
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Time</div>
+              
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 600">
+                <motion.path 
+                  d="M 50 550 Q 150 550 250 100 Q 350 500 450 500 Q 600 500 800 300 Q 900 250 950 250"
+                  fill="none"
+                  stroke="#6366f1"
+                  strokeWidth="4"
+                  strokeDasharray="8 4"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 3 }}
+                />
+              </svg>
+
+              <div className="absolute inset-x-12 inset-y-8 flex gap-4">
+                 {framework.sections.map((section, idx) => {
+                    const positions = [
+                      { left: '15%', top: '70%' },
+                      { left: '25%', top: '10%' },
+                      { left: '45%', top: '80%' },
+                      { left: '65%', top: '50%' },
+                      { left: '85%', top: '35%' }
+                    ];
+                    return (
+                      <div 
+                        key={section.id} 
+                        className="absolute w-48 transition-all hover:z-50"
+                        style={positions[idx] || {}}
+                      >
+                         <SectionBox 
+                            title={section.name}
+                            notes={notes.filter(n => n.sectionId === section.id)}
+                            onAddNote={() => onAddNote(section.id)}
+                            onNoteDelete={onNoteDelete}
+                            onNoteUpdate={onNoteUpdate}
+                            onClick={() => onSectionClick(section.name)}
+                            framework={framework}
+                            small
+                            className="bg-white/90 backdrop-blur shadow-xl border-indigo-50"
+                         />
+                      </div>
+                    );
+                 })}
+              </div>
+           </div>
+        );
+      case 's-curve':
+        return (
+           <div className={`relative border-l-2 border-b-2 border-slate-200 p-8 ${isMobile ? 'w-full h-auto min-h-[400px]' : 'w-[90vw] h-[600px]'}`}>
+              <div className="absolute left-4 top-1/2 -rotate-90 text-[10px] font-black text-slate-400 uppercase tracking-widest">Performance</div>
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Time / Effort</div>
+              
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 600">
+                <motion.path 
+                  d="M 50 550 Q 300 550 500 300 Q 700 50 950 50"
+                  fill="none"
+                  stroke="#10b981"
+                  strokeWidth="4"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 3 }}
+                />
+              </svg>
+
+              <div className="absolute inset-x-12 inset-y-8 flex gap-4">
+                 {framework.sections.map((section, idx) => {
+                    const positions = [
+                      { left: '5%', top: '75%' },
+                      { left: '40%', top: '40%' },
+                      { left: '75%', top: '10%' }
+                    ];
+                    return (
+                      <div 
+                        key={section.id} 
+                        className="absolute w-56 transition-all hover:z-50"
+                        style={positions[idx] || {}}
+                      >
+                         <SectionBox 
+                            title={section.name}
+                            notes={notes.filter(n => n.sectionId === section.id)}
+                            onAddNote={() => onAddNote(section.id)}
+                            onNoteDelete={onNoteDelete}
+                            onNoteUpdate={onNoteUpdate}
+                            onClick={() => onSectionClick(section.name)}
+                            framework={framework}
+                            className="bg-white/90 backdrop-blur shadow-xl border-emerald-50"
+                         />
+                      </div>
+                    );
+                 })}
+              </div>
+           </div>
+        );
+      case 'bell-curve':
+        return (
+           <div className={`relative border-b-2 border-slate-200 p-8 ${isMobile ? 'w-full h-auto min-h-[400px]' : 'w-[90vw] h-[600px]'}`}>
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Time / Adopters</div>
+              
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 600">
+                <motion.path 
+                  d="M 50 550 Q 250 550 350 300 Q 500 0 650 300 Q 750 550 950 550"
+                  fill="none"
+                  stroke="#6366f1"
+                  strokeWidth="4"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 3 }}
+                />
+                {/* Vertical Area Dividers */}
+                <line x1="150" y1="550" x2="150" y2="400" stroke="#e2e8f0" strokeDasharray="4" />
+                <line x1="300" y1="550" x2="300" y2="200" stroke="#e2e8f0" strokeDasharray="4" />
+                <line x1="500" y1="550" x2="500" y2="50" stroke="#e2e8f0" strokeDasharray="4" />
+                <line x1="700" y1="550" x2="700" y2="200" stroke="#e2e8f0" strokeDasharray="4" />
+                <line x1="850" y1="550" x2="850" y2="400" stroke="#e2e8f0" strokeDasharray="4" />
+              </svg>
+
+              <div className="absolute inset-x-12 inset-y-8 flex gap-4">
+                 {framework.sections.map((section, idx) => {
+                    const positions = [
+                      { left: '2%', top: '65%' },
+                      { left: '17%', top: '35%' },
+                      { left: '35%', top: '15%' },
+                      { left: '55%', top: '35%' },
+                      { left: '80%', top: '65%' }
+                    ];
+                    return (
+                      <div 
+                        key={section.id} 
+                        className="absolute w-40 transition-all hover:z-50"
+                        style={positions[idx] || {}}
+                      >
+                         <SectionBox 
+                            title={section.name}
+                            notes={notes.filter(n => n.sectionId === section.id)}
+                            onAddNote={() => onAddNote(section.id)}
+                            onNoteDelete={onNoteDelete}
+                            onNoteUpdate={onNoteUpdate}
+                            onClick={() => onSectionClick(section.name)}
+                            framework={framework}
+                            small
+                            className="bg-white/90 backdrop-blur shadow-xl border-indigo-50"
+                         />
+                      </div>
+                    );
+                 })}
+              </div>
+           </div>
+        );
+      case 'satir':
+        return (
+           <div className={`relative border-l-2 border-b-2 border-slate-200 p-8 ${isMobile ? 'w-full h-auto min-h-[400px]' : 'w-[90vw] h-[600px]'}`}>
+              <div className="absolute left-4 top-1/2 -rotate-90 text-[10px] font-black text-slate-400 uppercase tracking-widest">Performance</div>
+              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Time</div>
+              
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 600">
+                <motion.path 
+                  d="M 50 200 L 250 200 Q 300 200 350 450 Q 500 600 650 300 Q 750 100 950 100"
+                  fill="none"
+                  stroke="#ef4444"
+                  strokeWidth="4"
+                  initial={{ pathLength: 0 }}
+                  animate={{ pathLength: 1 }}
+                  transition={{ duration: 3 }}
+                />
+              </svg>
+
+              <div className="absolute inset-x-12 inset-y-8 flex gap-4">
+                 {framework.sections.map((section, idx) => {
+                    const positions = [
+                      { left: '5%', top: '15%' },
+                      { left: '20%', top: '35%' },
+                      { left: '40%', top: '75%' },
+                      { left: '60%', top: '45%' },
+                      { left: '80%', top: '5%' }
+                    ];
+                    return (
+                      <div 
+                        key={section.id} 
+                        className="absolute w-44 transition-all hover:z-50"
+                        style={positions[idx] || {}}
+                      >
+                         <SectionBox 
+                            title={section.name}
+                            notes={notes.filter(n => n.sectionId === section.id)}
+                            onAddNote={() => onAddNote(section.id)}
+                            onNoteDelete={onNoteDelete}
+                            onNoteUpdate={onNoteUpdate}
+                            onClick={() => onSectionClick(section.name)}
+                            framework={framework}
+                            small
+                            className="bg-white/90 backdrop-blur shadow-xl border-rose-50"
+                         />
+                      </div>
+                    );
+                 })}
+              </div>
+           </div>
+        );
+      case 'spiral':
+        return (
+          <div className={`relative flex items-center justify-center ${isMobile ? 'w-[95vw] h-auto' : 'w-[80vh] h-[80vh]'}`}>
+            {!isMobile && (
+              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 1000">
+                <motion.path 
+                    d="M 500 500 C 500 400, 600 400, 600 500 C 600 650, 400 650, 400 500 C 400 300, 700 300, 700 500 C 700 750, 300 750, 300 500 C 300 200, 800 200, 800 500 C 800 850, 200 850, 200 500"
+                    fill="none"
+                    stroke="#cbd5e1"
+                    strokeWidth="2"
+                    strokeDasharray="8 4"
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 4 }}
+                />
+                <line x1="500" y1="0" x2="500" y2="1000" stroke="#f1f5f9" strokeWidth="1" />
+                <line x1="0" y1="500" x2="1000" y2="500" stroke="#f1f5f9" strokeWidth="1" />
+              </svg>
+            )}
+            
+            <div className={`inset-0 w-full ${isMobile ? 'flex flex-col gap-4' : 'absolute grid grid-cols-2 grid-rows-2'}`}>
+               {framework.sections.map((section, idx) => {
+                  const colors = ['border-blue-400', 'border-rose-400', 'border-emerald-400', 'border-amber-400'];
+                  return (
+                    <div 
+                      key={section.id} 
+                      className={`${isMobile ? 'p-2' : 'p-12'} flex flex-col items-center justify-center relative group`}
+                    >
+                       {!isMobile && <div className="absolute top-4 left-4 text-[10px] font-black text-slate-300 uppercase tracking-widest">{idx + 1}</div>}
+                       <SectionBox 
+                          title={section.name}
+                          notes={notes.filter(n => n.sectionId === section.id)}
+                          onAddNote={() => onAddNote(section.id)}
+                          onNoteDelete={onNoteDelete}
+                          onNoteUpdate={onNoteUpdate}
+                          onClick={() => onSectionClick(section.name)}
+                          framework={framework}
+                          className={`w-full max-w-sm ${colors[idx % colors.length]}`}
+                       />
+                    </div>
+                  );
+               })}
+            </div>
+          </div>
+        );
+      case 't-chart':
+        return (
+          <div className={`flex flex-col md:flex-row h-full w-full max-w-6xl gap-8 ${isMobile ? 'p-2' : ''}`}>
+            {framework.sections.map((section, idx) => (
+              <div key={section.id} className="flex-1 flex flex-col items-center">
+                <div className="w-full text-center mb-4 pb-2 border-b-4 border-indigo-500">
+                  <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">{section.name}</h3>
+                </div>
+                <div className="w-full h-full bg-slate-50/50 rounded-2xl p-6 border-x border-b border-slate-100 flex flex-col gap-4">
+                   <button 
+                      onClick={() => onAddNote(section.id)}
+                      className="w-full py-4 border-2 border-dashed border-slate-200 rounded-xl text-slate-400 hover:border-indigo-300 hover:text-indigo-600 transition-all flex items-center justify-center gap-2 text-xs font-bold bg-white"
+                    >
+                      <Plus size={14} /> Add Entry
+                    </button>
+                    <div className="space-y-4">
+                       {notes.filter(n => n.sectionId === section.id).map(note => (
+                          <StickyNoteCard 
+                             key={note.id} 
+                             note={note} 
+                             onDelete={() => onNoteDelete(note.id)}
+                             onUpdate={(u) => onNoteUpdate(note.id, u)}
+                             sections={framework.sections}
+                          />
+                       ))}
+                    </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      case 'comparison':
+        return (
+          <div className={`flex items-center justify-center gap-8 ${isMobile ? 'flex-col w-full' : 'w-[95vw]'}`}>
+            {framework.sections.map((section, idx) => (
+              <React.Fragment key={section.id}>
+                <div className={`${isMobile ? 'w-full' : 'flex-1 max-w-md'}`}>
+                   <SectionBox 
+                      title={section.name}
+                      notes={notes.filter(n => n.sectionId === section.id)}
+                      onAddNote={() => onAddNote(section.id)}
+                      onNoteDelete={onNoteDelete}
+                      onNoteUpdate={onNoteUpdate}
+                      onClick={() => onSectionClick(section.name)}
+                      framework={framework}
+                      className={idx === 2 ? 'border-indigo-500 bg-indigo-50/20' : ''}
+                   />
+                </div>
+                {!isMobile && (
+                  <>
+                    {idx === 0 && <div className="text-2xl font-black text-slate-300">+</div>}
+                    {idx === 1 && <div className="text-2xl font-black text-slate-300">=</div>}
+                  </>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        );
+      case 'kanban':
+        return (
+          <div className={`flex gap-6 ${isMobile ? 'flex-col min-h-[80vh] w-full overflow-y-auto' : 'h-[70vh] w-[95vw] px-8 overflow-x-auto'}`}>
+            {framework.sections.map((section) => (
+              <div key={section.id} className={`${isMobile ? 'w-full' : 'flex-1 min-w-[300px]'} flex flex-col bg-slate-100/50 rounded-xl p-4 border border-slate-200`}>
+                 <div className="flex items-center justify-between mb-4 px-2">
+                    <h3 className="font-black text-[10px] uppercase tracking-widest text-slate-500">{section.name}</h3>
+                    <div className="bg-white px-2 py-0.5 rounded text-[10px] font-bold text-slate-400 border border-slate-200">
+                      {notes.filter(n => n.sectionId === section.id).length}
+                    </div>
+                 </div>
+                 <div className="flex-1 overflow-y-auto space-y-4">
+                    <button 
+                      onClick={() => onAddNote(section.id)}
+                      className="w-full py-3 border-2 border-dashed border-slate-200 rounded-lg text-slate-400 hover:border-indigo-300 hover:text-indigo-500 transition-all flex items-center justify-center gap-2 text-xs font-medium bg-white"
+                    >
+                      <Plus size={14} /> Add Card
+                    </button>
+                    {notes.filter(n => n.sectionId === section.id).map(note => (
+                       <StickyNoteCard 
+                          key={note.id} 
+                          note={note} 
+                          onDelete={() => onNoteDelete(note.id)}
+                          onUpdate={(u) => onNoteUpdate(note.id, u)}
+                          sections={framework.sections}
+                       />
+                    ))}
+                 </div>
+              </div>
+            ))}
+          </div>
+        );
+      case 'value-chain':
+        return (
+          <div className={`relative flex flex-col gap-4 ${isMobile ? 'w-full' : 'w-[95vw] max-w-6xl'}`}>
+             {/* Support Activities */}
+             <div className="flex flex-col gap-2">
+                {framework.sections.slice(5).map(section => (
+                   <SectionBox 
+                      key={section.id}
+                      title={section.name}
+                      notes={notes.filter(n => n.sectionId === section.id)}
+                      onAddNote={() => onAddNote(section.id)}
+                      onNoteDelete={onNoteDelete}
+                      onNoteUpdate={onNoteUpdate}
+                      onClick={() => onSectionClick(section.name)}
+                      framework={framework}
+                      className="h-20 border-l-4 border-l-slate-300 bg-slate-50/50"
+                   />
+                ))}
+             </div>
+             {/* Primary Activities */}
+             <div className={`relative flex gap-2 ${isMobile ? 'flex-col' : ''}`}>
+                {framework.sections.slice(0, 5).map((section, idx) => (
+                   <SectionBox 
+                      key={section.id}
+                      title={section.name}
+                      notes={notes.filter(n => n.sectionId === section.id)}
+                      onAddNote={() => onAddNote(section.id)}
+                      onNoteDelete={onNoteDelete}
+                      onNoteUpdate={onNoteUpdate}
+                      onClick={() => onSectionClick(section.name)}
+                      framework={framework}
+                      className={`flex-1 ${isMobile ? 'h-32' : 'h-48'} ${idx === 0 && !isMobile ? 'rounded-l-2xl' : ''} border-b-4 border-b-indigo-500`}
+                   />
+                ))}
+                {/* Margin Wedge */}
+                {!isMobile && (
+                  <div className="w-24 bg-indigo-600 flex items-center justify-center text-white font-black text-xs uppercase tracking-widest [clip-path:polygon(0%_0%,70%_0%,100%_50%,70%_100%,0%_100%)]">
+                    Margin
+                  </div>
+                )}
+             </div>
+          </div>
+        );
+      case 'gauge':
+        return (
+          <div className="relative w-[80vw] h-[500px] flex flex-col items-center justify-center p-8">
+            <svg className="w-[500px] h-[300px]" viewBox="0 0 500 300">
+               {/* Gauge Background */}
+               <path 
+                  d="M 50 250 A 200 200 0 0 1 450 250" 
+                  fill="none" 
+                  stroke="#f1f5f9" 
+                  strokeWidth="40" 
+                  strokeLinecap="round"
+               />
+               {/* Zones */}
+               <path 
+                  d="M 50 250 A 200 200 0 0 1 183 76" 
+                  fill="none" 
+                  stroke="#ef4444" 
+                  strokeWidth="40" 
+                  strokeLinecap="butt"
+               />
+               <path 
+                  d="M 183 76 A 200 200 0 0 1 316 76" 
+                  fill="none" 
+                  stroke="#94a3b8" 
+                  strokeWidth="40" 
+                  strokeLinecap="butt"
+               />
+               <path 
+                  d="M 316 76 A 200 200 0 0 1 450 250" 
+                  fill="none" 
+                  stroke="#10b981" 
+                  strokeWidth="40" 
+                  strokeLinecap="butt"
+               />
+               <motion.line 
+                  x1="250" y1="250" x2="250" y2="80" 
+                  stroke="#1e293b" strokeWidth="4" strokeLinecap="round"
+                  initial={{ rotate: -90, originX: '250px', originY: '250px' }}
+                  animate={{ rotate: 0 }}
+                  transition={{ duration: 1.5, ease: "easeOut" }}
+               />
+               <circle cx="250" cy="250" r="8" fill="#1e293b" />
+            </svg>
+
+            <div className="absolute inset-0 flex justify-between items-end p-12 mb-8">
+               {framework.sections.map((section, idx) => {
+                  const colors = ['border-rose-500', 'border-slate-500', 'border-emerald-500'];
+                  const alignment = idx === 0 ? 'items-end' : idx === 1 ? 'items-center -mt-96' : 'items-start';
+                  return (
+                    <div key={section.id} className={`flex flex-col ${alignment} w-64`}>
+                       <SectionBox 
+                          title={section.name}
+                          notes={notes.filter(n => n.sectionId === section.id)}
+                          onAddNote={() => onAddNote(section.id)}
+                          onNoteDelete={onNoteDelete}
+                          onNoteUpdate={onNoteUpdate}
+                          onClick={() => onSectionClick(section.name)}
+                          framework={framework}
+                          className={`bg-white shadow-xl ${colors[idx]}`}
+                          small
+                       />
+                    </div>
+                  );
+               })}
+            </div>
+          </div>
+        );
+      case 'hoq':
+        return (
+          <div className={`relative flex flex-col items-center justify-center p-8 ${isMobile ? 'w-full scale-[0.6] origin-top -mt-20' : 'w-[95vw] h-[80vh]'}`}>
+            <div className="relative flex flex-col items-center">
+              {/* Roof */}
+              <div className="w-64 h-32 bg-slate-100 border-2 border-slate-300 relative [clip-path:polygon(50%_0%,100%_100%,0%_100%)] mb-[-2px] flex items-end justify-center pb-2">
+                <SectionBox 
+                  title={framework.sections[3].name}
+                  notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
+                  onAddNote={() => onAddNote(framework.sections[3].id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(framework.sections[3].name)}
+                  framework={framework}
+                  small
+                  className="w-48 bg-white/50"
+                />
+              </div>
+              {/* Body */}
+              <div className={`flex ${isMobile ? 'flex-col gap-4' : 'gap-2'}`}>
+                {/* Left Panel */}
+                <div className={`${isMobile ? 'w-full' : 'w-64'} flex flex-col gap-2 justify-center`}>
+                   <SectionBox 
+                      title={framework.sections[0].name}
+                      notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
+                      onAddNote={() => onAddNote(framework.sections[0].id)}
+                      onNoteDelete={onNoteDelete}
+                      onNoteUpdate={onNoteUpdate}
+                      onClick={() => onSectionClick(framework.sections[0].name)}
+                      framework={framework}
+                      className="border-r-4 border-r-indigo-500"
+                   />
+                </div>
+                {/* Center Grid */}
+                <div className={`${isMobile ? 'w-full' : 'w-96'} h-96 bg-slate-50 border-2 border-slate-200 rounded-lg flex items-center justify-center`}>
+                   <SectionBox 
+                      title={framework.sections[2].name}
+                      notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
+                      onAddNote={() => onAddNote(framework.sections[2].id)}
+                      onNoteDelete={onNoteDelete}
+                      onNoteUpdate={onNoteUpdate}
+                      onClick={() => onSectionClick(framework.sections[2].name)}
+                      framework={framework}
+                      className="w-full h-full border-none shadow-none bg-transparent"
+                   />
+                </div>
+                {/* Right Panel */}
+                <div className={`${isMobile ? 'w-full' : 'w-64'} flex flex-col gap-2`}>
+                   <SectionBox 
+                      title={framework.sections[1].name}
+                      notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
+                      onAddNote={() => onAddNote(framework.sections[1].id)}
+                      onNoteDelete={onNoteDelete}
+                      onNoteUpdate={onNoteUpdate}
+                      onClick={() => onSectionClick(framework.sections[1].name)}
+                      framework={framework}
+                      className="border-t-4 border-t-emerald-500"
+                   />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case 'ladder':
+        return (
+          <div className="flex flex-col items-center gap-4 w-[90vw] py-12">
+            {[...framework.sections].reverse().map((section, idx) => (
+              <div key={section.id} className="relative flex items-center group">
+                {/* Rungs */}
+                {idx > 0 && (
+                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-4 h-4 border-l-2 border-r-2 border-slate-300" />
+                )}
+                <div className="w-96 flex items-center gap-4">
+                  <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xs">
+                    {framework.sections.length - idx}
+                  </div>
+                  <SectionBox 
+                    title={section.name}
+                    notes={notes.filter(n => n.sectionId === section.id)}
+                    onAddNote={() => onAddNote(section.id)}
+                    onNoteDelete={onNoteDelete}
+                    onNoteUpdate={onNoteUpdate}
+                    onClick={() => onSectionClick(section.name)}
+                    framework={framework}
+                    className="flex-1 border-indigo-100 shadow-sm"
+                  />
+                </div>
+              </div>
+            ))}
+          </div>
+        );
+      case 'iceberg':
+        return (
+          <div className="relative w-[90vw] h-[80vh] flex items-center justify-center">
+            {/* Water Line */}
+            <div className="absolute top-1/4 left-0 w-full h-1 bg-blue-400/30 blur-sm" />
+            
+            <div className="relative w-[600px] h-full flex flex-col items-center">
+               <svg className="absolute inset-0 w-full h-full" viewBox="0 0 600 800">
+                  <path 
+                    d="M 300 50 L 550 750 L 50 750 Z" 
+                    fill="#f8fafc" 
+                    stroke="#e2e8f0" 
+                    strokeWidth="2"
+                  />
+               </svg>
+               
+               <div className="relative z-10 w-full h-full flex flex-col gap-8 p-12">
+                  {framework.sections.map((section, idx) => {
+                     const mt = [0, 40, 100, 150];
+                     const widths = ['w-1/3', 'w-1/2', 'w-2/3', 'w-full'];
+                     return (
+                       <div 
+                         key={section.id} 
+                         className={`flex flex-col items-center self-center ${idx === 0 ? 'mt-0' : ''}`}
+                         style={{ marginTop: idx === 0 ? 0 : 20 }}
+                       >
+                          <div className={`${widths[idx]} text-center`}>
+                             <SectionBox 
+                                title={section.name}
+                                notes={notes.filter(n => n.sectionId === section.id)}
+                                onAddNote={() => onAddNote(section.id)}
+                                onNoteDelete={onNoteDelete}
+                                onNoteUpdate={onNoteUpdate}
+                                onClick={() => onSectionClick(section.name)}
+                                framework={framework}
+                                small
+                                className={`bg-white/80 backdrop-blur-sm border-slate-200 ${idx === 0 ? 'shadow-indigo-100 shadow-lg' : ''}`}
+                             />
+                          </div>
+                          {idx === 0 && (
+                            <div className="mt-4 px-3 py-1 bg-blue-500 text-white text-[8px] font-black uppercase tracking-widest rounded-full">Visible</div>
+                          )}
+                       </div>
+                     );
+                  })}
+               </div>
+            </div>
+          </div>
+        );
+      case 'congruence':
+        return (
+          <div className="relative w-[95vw] h-[70vh] flex items-center justify-between gap-4 px-12">
+            {/* Inputs */}
+            <div className="flex flex-col gap-4 w-64">
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Inputs</div>
+              <SectionBox 
+                title={framework.sections[0].name}
+                notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
+                onAddNote={() => onAddNote(framework.sections[0].id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(framework.sections[0].name)}
+                framework={framework}
+                className="border-indigo-200 bg-indigo-50/10"
+              />
+            </div>
+
+            {/* Transition Arrow */}
+            <div className="text-slate-200"><ArrowRight size={32} /></div>
+
+            {/* Components Grid */}
+            <div className="flex-1 max-w-4xl grid grid-cols-2 grid-rows-2 gap-8 p-12 border-4 border-dashed border-slate-100 rounded-[3rem] relative">
+               <div className="absolute top-1/2 left-0 -translate-y-1/2 -ml-8 w-16 h-1 bg-gradient-to-r from-slate-200 to-transparent" />
+               <div className="absolute top-1/2 right-0 -translate-y-1/2 -mr-8 w-16 h-1 bg-gradient-to-l from-slate-200 to-transparent" />
+               
+               {framework.sections.slice(1, 5).map((section, idx) => (
+                  <SectionBox 
+                    key={section.id}
+                    title={section.name}
+                    notes={notes.filter(n => n.sectionId === section.id)}
+                    onAddNote={() => onAddNote(section.id)}
+                    onNoteDelete={onNoteDelete}
+                    onNoteUpdate={onNoteUpdate}
+                    onClick={() => onSectionClick(section.name)}
+                    framework={framework}
+                    className="shadow-inner bg-white"
+                  />
+               ))}
+               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-50 px-4 py-2 rounded-full border border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-widest z-10">Congruence</div>
+            </div>
+
+            {/* Transition Arrow */}
+            <div className="text-slate-200"><ArrowRight size={32} /></div>
+
+            {/* Outputs */}
+            <div className="flex flex-col gap-4 w-64">
+              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Outputs</div>
+              <SectionBox 
+                title={framework.sections[5].name}
+                notes={notes.filter(n => n.sectionId === framework.sections[5].id)}
+                onAddNote={() => onAddNote(framework.sections[5].id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(framework.sections[5].name)}
+                framework={framework}
+                className="border-emerald-200 bg-emerald-50/10"
+              />
+            </div>
+          </div>
+        );
+      case 'cultural-web':
+        return (
+          <div className="relative w-[80vh] h-[80vh] flex items-center justify-center">
+            {/* Center Paradigm */}
+            <div className="z-20 w-64">
+              <SectionBox 
+                title={framework.sections[0].name}
+                notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
+                onAddNote={() => onAddNote(framework.sections[0].id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(framework.sections[0].name)}
+                framework={framework}
+                className="bg-indigo-600 text-white border-none shadow-[0_0_50px_rgba(79,70,229,0.3)]"
+                small
+              />
+            </div>
+
+            {/* Outer Elements */}
+            <div className="absolute inset-0">
+               {framework.sections.slice(1).map((section, idx) => {
+                  const angle = (idx * 60) * (Math.PI / 180);
+                  const radius = 300;
+                  const x = Math.cos(angle) * radius;
+                  const y = Math.sin(angle) * radius;
+                  return (
+                    <div 
+                      key={section.id}
+                      className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 group"
+                      style={{ transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))` }}
+                    >
+                       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-1 bg-gradient-to-r from-transparent to-slate-100 -z-10 group-hover:bg-indigo-100 transition-colors" style={{ transform: `translate(-50%, -50%) rotate(${idx * 60 + 180}deg)`, originX: '0%' }} />
+                       <SectionBox 
+                          title={section.name}
+                          notes={notes.filter(n => n.sectionId === section.id)}
+                          onAddNote={() => onAddNote(section.id)}
+                          onNoteDelete={onNoteDelete}
+                          onNoteUpdate={onNoteUpdate}
+                          onClick={() => onSectionClick(section.name)}
+                          framework={framework}
+                          small
+                          className="w-48 bg-white/80 backdrop-blur border-slate-200"
+                       />
+                    </div>
+                  );
+               })}
+            </div>
+          </div>
+        );
+      case 'diamond':
+        return (
+          <div className="relative w-[800px] h-[800px] flex items-center justify-center p-8">
+            <div className="absolute inset-0 flex items-center justify-center">
+              <div className="w-[500px] h-[500px] rotate-45 border-2 border-slate-200 bg-white/20" />
+            </div>
+            
+            <div className="relative z-10 w-full h-full">
+              {/* Top: Arenas */}
+              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64">
+                <SectionBox 
+                  title={framework.sections[0].name}
+                  notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
+                  onAddNote={() => onAddNote(framework.sections[0].id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(framework.sections[0].name)}
+                  framework={framework}
+                  className="bg-white/90 backdrop-blur shadow-lg border-t-4 border-t-blue-500"
+                />
+              </div>
+
+              {/* Left: Vehicles */}
+              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-64">
+                <SectionBox 
+                  title={framework.sections[1].name}
+                  notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
+                  onAddNote={() => onAddNote(framework.sections[1].id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(framework.sections[1].name)}
+                  framework={framework}
+                  className="bg-white/90 backdrop-blur shadow-lg border-l-4 border-l-indigo-500"
+                />
+              </div>
+
+              {/* Right: Differentiators */}
+              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-64">
+                <SectionBox 
+                  title={framework.sections[2].name}
+                  notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
+                  onAddNote={() => onAddNote(framework.sections[2].id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(framework.sections[2].name)}
+                  framework={framework}
+                  className="bg-white/90 backdrop-blur shadow-lg border-r-4 border-r-emerald-500"
+                />
+              </div>
+
+              {/* Bottom: Staging */}
+              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-64">
+                <SectionBox 
+                  title={framework.sections[3].name}
+                  notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
+                  onAddNote={() => onAddNote(framework.sections[3].id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(framework.sections[3].name)}
+                  framework={framework}
+                  className="bg-white/90 backdrop-blur shadow-lg border-b-4 border-b-amber-500"
+                />
+              </div>
+
+              {/* Center: Economic Logic */}
+              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 z-20">
+                <SectionBox 
+                  title={framework.sections[4].name}
+                  notes={notes.filter(n => n.sectionId === framework.sections[4].id)}
+                  onAddNote={() => onAddNote(framework.sections[4].id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(framework.sections[4].name)}
+                  framework={framework}
+                  className="bg-indigo-600 text-white border-none shadow-2xl scale-110"
+                  small
+                />
+              </div>
+            </div>
+          </div>
+        );
+      case 'bell-curve':
+      case 's-curve':
+        return (
+          <div className="relative w-full max-w-5xl aspect-[16/9] md:aspect-[21/9] flex flex-col items-center justify-center p-4 md:p-8">
+             <div className="relative w-full h-full max-h-[400px] border-b-2 border-slate-200">
+                <svg className="w-full h-full" viewBox="0 0 1000 300" preserveAspectRatio="none">
+                   <path 
+                      d={framework.layout === 'bell-curve' 
+                        ? "M 0 280 Q 250 280 500 50 Q 750 280 1000 280"
+                        : "M 0 280 Q 300 280 500 150 T 1000 50"
+                      }
+                      fill="none"
+                      stroke="#cbd5e1"
+                      strokeWidth="2"
+                      strokeDasharray="8 4"
+                   />
+                </svg>
+                
+                <div className="absolute inset-0 flex items-end justify-between px-12">
+                   {framework.sections.map((section, idx) => {
+                      const heights = framework.layout === 'bell-curve' 
+                        ? [20, 150, 200, 20] 
+                        : [20, 100, 200, 250];
+                      return (
+                        <div key={section.id} className="flex flex-col items-center gap-4 w-48">
+                           <SectionBox 
+                              title={section.name}
+                              notes={notes.filter(n => n.sectionId === section.id)}
+                              onAddNote={() => onAddNote(section.id)}
+                              onNoteDelete={onNoteDelete}
+                              onNoteUpdate={onNoteUpdate}
+                              onClick={() => onSectionClick(section.name)}
+                              framework={framework}
+                              className="bg-white shadow-xl border-indigo-100"
+                              small
+                           />
+                           <div 
+                              className="w-1 bg-indigo-500 rounded-full" 
+                              style={{ height: heights[idx] }} 
+                           />
+                        </div>
+                      );
+                   })}
+                </div>
+             </div>
+          </div>
+        );
+      case 'matrix':
+        return (
+          <div className="relative w-full max-w-2xl aspect-square flex items-center justify-center p-4 md:p-12 scale-[0.9] md:scale-100">
+            {/* Horizontal Axis */}
+            <div className="absolute left-0 right-0 top-1/2 h-1 bg-slate-200 -translate-y-1/2" />
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">Low</div>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">High</div>
+            
+            {/* Vertical Axis */}
+            <div className="absolute top-0 bottom-0 left-1/2 w-1 bg-slate-200 -translate-x-1/2" />
+            <div className="absolute left-1/2 bottom-2 -translate-x-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">Low</div>
+            <div className="absolute left-1/2 top-2 -translate-x-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">High</div>
+
+            <div className="grid grid-cols-2 grid-rows-2 gap-4 md:gap-12 w-full h-full">
+              {framework.sections.map((section, idx) => {
+                const borderColors = ['border-blue-500', 'border-indigo-500', 'border-emerald-500', 'border-amber-500'];
+                return (
+                  <div key={section.id} className="relative z-10 flex items-center justify-center">
+                    <SectionBox 
+                      title={section.name}
+                      notes={notes.filter(n => n.sectionId === section.id)}
+                      onAddNote={() => onAddNote(section.id)}
+                      onNoteDelete={onNoteDelete}
+                      onNoteUpdate={onNoteUpdate}
+                      onClick={() => onSectionClick(section.name)}
+                      framework={framework}
+                      className={`shadow-lg bg-white/90 backdrop-blur-sm border-t-4 ${borderColors[idx]}`}
+                    />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        );
+      case 'graph':
+        return (
+          <div className="relative w-full max-w-5xl aspect-video border-l-2 border-b-2 border-slate-200 p-4 md:p-8 flex items-end">
+             <div className="absolute left-2 top-1/2 -rotate-90 text-[8px] font-black text-slate-400 uppercase tracking-widest">High Quality</div>
+             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">Strategic Factors</div>
+             
+             <div className="flex-1 h-full flex items-end gap-2 md:gap-12 px-2 md:px-12">
+                {framework.sections.map((section, idx) => (
+                  <div key={section.id} className="flex-1 flex flex-col items-center gap-4">
+                     <div className="w-full flex-1 relative bg-slate-50/30 rounded-t-lg border-x border-t border-slate-100 flex flex-col justify-end p-2">
+                        {notes.filter(n => n.sectionId === section.id).map(note => (
+                            <StickyNoteCard 
+                                key={note.id} 
+                                note={note} 
+                                onDelete={() => onNoteDelete(note.id)}
+                                onUpdate={(u) => onNoteUpdate(note.id, u)}
+                                sections={framework.sections}
+                                compact
+                            />
+                        ))}
+                        <button 
+                            onClick={() => onAddNote(section.id)}
+                            className="mt-2 w-full py-2 border border-dashed border-slate-200 rounded text-slate-400 hover:bg-slate-50 hover:text-indigo-600 transition-all flex items-center justify-center"
+                        >
+                            <Plus size={14} />
+                        </button>
+                     </div>
+                     <div className="text-[10px] font-bold text-slate-500 text-center uppercase tracking-tighter h-8 flex items-center">{section.name}</div>
+                  </div>
+                ))}
+             </div>
+             
+             {/* Strategy Line Visualization */}
+             <svg className="absolute inset-x-8 inset-y-8 pointer-events-none w-full h-full opacity-20">
+                <motion.path 
+                    initial={{ pathLength: 0 }}
+                    animate={{ pathLength: 1 }}
+                    transition={{ duration: 2 }}
+                    d={`M ${100} ${500} L ${300} ${400} L ${500} ${300} L ${700} ${100}`}
+                    fill="none"
+                    stroke="url(#gradient)"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                />
+                <defs>
+                    <linearGradient id="gradient" x1="0%" y1="0%" x2="100%" y2="0%">
+                        <stop offset="0%" stopColor="#6366f1" />
+                        <stop offset="100%" stopColor="#ec4899" />
+                    </linearGradient>
+                </defs>
+             </svg>
+          </div>
+        );
+      case 'x-matrix':
+        return (
+          <div className="relative w-full max-w-2xl aspect-square bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex items-center justify-center p-4">
+            <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
+                <div className="border-r border-b border-slate-100 bg-slate-50/20" />
+                <div className="border-b border-slate-100" />
+                <div className="border-r border-slate-100" />
+                <div className="bg-slate-50/20" />
+            </div>
+
+            <div className="relative z-10 w-full h-full flex items-center justify-center">
+                {/* Center Core */}
+                <div className="absolute w-16 h-16 md:w-32 md:h-32 rotate-45 border-2 border-slate-200 bg-white z-50 flex items-center justify-center shadow-lg">
+                    <div className="-rotate-45 font-black text-center text-slate-800 text-[6px] md:text-[10px] uppercase tracking-tighter">Hoshin<br/>Kanri</div>
+                </div>
+
+                {/* Quadrants */}
+                <div className="absolute top-0 w-32 md:w-64 h-32 md:h-64">
+                    <SectionBox 
+                        title={framework.sections[2].name}
+                        notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
+                        onAddNote={() => onAddNote(framework.sections[2].id)}
+                        onNoteDelete={onNoteDelete}
+                        onNoteUpdate={onNoteUpdate}
+                        onClick={() => onSectionClick(framework.sections[2].name)}
+                        framework={framework}
+                        className="h-full border-indigo-200 shadow-indigo-100"
+                        small
+                    />
+                </div>
+                <div className="absolute bottom-0 w-32 md:w-64 h-32 md:h-64">
+                    <SectionBox 
+                        title={framework.sections[0].name}
+                        notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
+                        onAddNote={() => onAddNote(framework.sections[0].id)}
+                        onNoteDelete={onNoteDelete}
+                        onNoteUpdate={onNoteUpdate}
+                        onClick={() => onSectionClick(framework.sections[0].name)}
+                        framework={framework}
+                        className="h-full border-emerald-200 shadow-emerald-100"
+                        small
+                    />
+                </div>
+                <div className="absolute left-0 w-32 md:w-64 h-32 md:h-64">
+                    <SectionBox 
+                        title={framework.sections[1].name}
+                        notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
+                        onAddNote={() => onAddNote(framework.sections[1].id)}
+                        onNoteDelete={onNoteDelete}
+                        onNoteUpdate={onNoteUpdate}
+                        onClick={() => onSectionClick(framework.sections[1].name)}
+                        framework={framework}
+                        className="h-full border-blue-200 shadow-blue-100"
+                        small
+                    />
+                </div>
+                <div className="absolute right-0 w-32 md:w-64 h-32 md:h-64">
+                    <SectionBox 
+                        title={framework.sections[3].name}
+                        notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
+                        onAddNote={() => onAddNote(framework.sections[3].id)}
+                        onNoteDelete={onNoteDelete}
+                        onNoteUpdate={onNoteUpdate}
+                        onClick={() => onSectionClick(framework.sections[3].name)}
+                        framework={framework}
+                        className="h-full border-purple-200 shadow-purple-100"
+                        small
+                    />
+                </div>
+            </div>
+          </div>
+        );
+      case 'fishbone':
+        return (
+          <div className="relative w-full max-w-6xl aspect-video flex items-center justify-center p-4">
+            {/* Spine */}
+            <div className="absolute h-1 bg-slate-200 left-4 md:left-8 right-24 md:right-32 rounded-full" />
+            <div className="absolute right-4 md:right-8 w-16 h-16 md:w-24 md:h-24 border-l-4 border-b-4 border-slate-300 rotate-[-45deg] flex items-center justify-center">
+                <div className="rotate-[45deg] font-black text-slate-800 uppercase tracking-tighter text-center text-[8px] md:text-[10px]">PROBLEM<br/>HEAD</div>
+            </div>
+
+            {/* Bone Rows */}
+            <div className="absolute inset-0 flex flex-col justify-between py-6 md:py-12 px-12 md:px-32">
+                <div className="flex justify-around items-start">
+                    {framework.sections.slice(0, 3).map((section, idx) => (
+                        <div key={section.id} className="relative w-24 md:w-48 pt-4 md:pt-8">
+                             {/* Diagonal Bone */}
+                            <div className="absolute bottom-full left-1/2 w-px h-12 md:h-24 bg-slate-200 -rotate-[30deg] origin-bottom" />
+                            <SectionBox 
+                                title={section.name} 
+                                notes={notes.filter(n => n.sectionId === section.id)}
+                                onAddNote={() => onAddNote(section.id)}
+                                onNoteDelete={onNoteDelete}
+                                onNoteUpdate={onNoteUpdate}
+                                onClick={() => onSectionClick(section.name)}
+                                framework={framework}
+                                className="bg-white/80 backdrop-blur-sm"
+                                small
+                            />
+                        </div>
+                    ))}
+                </div>
+                <div className="flex justify-around items-end">
+                    {framework.sections.slice(3, 6).map((section, idx) => (
+                        <div key={section.id} className="relative w-24 md:w-48 pb-4 md:pb-8">
+                            {/* Diagonal Bone */}
+                            <div className="absolute top-full left-1/2 w-px h-12 md:h-24 bg-slate-200 rotate-[30deg] origin-top" />
+                            <SectionBox 
+                                title={section.name} 
+                                notes={notes.filter(n => n.sectionId === section.id)}
+                                onAddNote={() => onAddNote(section.id)}
+                                onNoteDelete={onNoteDelete}
+                                onNoteUpdate={onNoteUpdate}
+                                onClick={() => onSectionClick(section.name)}
+                                framework={framework}
+                                className="bg-white/80 backdrop-blur-sm"
+                                small
+                            />
+                        </div>
+                    ))}
+                </div>
+            </div>
+          </div>
+        );
+      case 'tree':
+        return (
+          <div className="flex flex-col md:flex-row items-center gap-8 md:gap-16 px-4 md:px-16 py-8 w-full overflow-x-auto">
+             <div className="shrink-0 w-full md:w-auto flex justify-center">
+                <SectionBox 
+                    title={framework.sections[0].name}
+                    notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
+                    onAddNote={() => onAddNote(framework.sections[0].id)}
+                    onNoteDelete={onNoteDelete}
+                    onNoteUpdate={onNoteUpdate}
+                    onClick={() => onSectionClick(framework.sections[0].name)}
+                    framework={framework}
+                    className="w-56"
+                />
+             </div>
+             
+             <ArrowRight className="text-slate-200 shrink-0 rotate-90 md:rotate-0" size={32} />
+
+             <div className="flex flex-col gap-8 shrink-0 w-full md:w-auto">
+                {framework.sections.slice(1, 3).map(section => (
+                    <div key={section.id} className="flex flex-col md:flex-row items-center gap-4 md:gap-8">
+                        <SectionBox 
+                            title={section.name}
+                            notes={notes.filter(n => n.sectionId === section.id)}
+                            onAddNote={() => onAddNote(section.id)}
+                            onNoteDelete={onNoteDelete}
+                            onNoteUpdate={onNoteUpdate}
+                            onClick={() => onSectionClick(section.name)}
+                            framework={framework}
+                            className="w-48"
+                        />
+                        {section.id === 'Branch1' && (
+                            <>
+                                <ArrowRight className="text-slate-200 rotate-90 md:rotate-0" size={24} />
+                                <SectionBox 
+                                    title={framework.sections[3].name}
+                                    notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
+                                    onAddNote={() => onAddNote(framework.sections[3].id)}
+                                    onNoteDelete={onNoteDelete}
+                                    onNoteUpdate={onNoteUpdate}
+                                    onClick={() => onSectionClick(framework.sections[3].name)}
+                                    framework={framework}
+                                    className="w-48"
+                                />
+                            </>
+                        )}
+                    </div>
+                ))}
+             </div>
+          </div>
+        );
+      case 'bow-tie':
+        return (
+          <div className="relative w-full max-w-6xl flex flex-col md:flex-row items-center justify-between gap-4 md:gap-8 px-4 md:px-12 py-8">
+            {/* Threats */}
+            <div className="flex flex-col gap-4 w-full md:flex-1">
+              <SectionBox 
+                title={framework.sections[0].name}
+                notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
+                onAddNote={() => onAddNote(framework.sections[0].id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(framework.sections[0].name)}
+                framework={framework}
+              />
+            </div>
+            <ArrowRight className="text-slate-300 rotate-90 md:rotate-0" />
+            
+            {/* Barriers Prevent */}
+            <div className="flex flex-col gap-4 w-full md:flex-1">
+              <SectionBox 
+                title={framework.sections[1].name}
+                notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
+                onAddNote={() => onAddNote(framework.sections[1].id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(framework.sections[1].name)}
+                framework={framework}
+              />
+            </div>
+            <ArrowRight className="text-slate-300 rotate-90 md:rotate-0" />
+
+            {/* Top Event */}
+            <div className="flex flex-col gap-4 w-full md:w-auto">
+              <div className="w-full md:w-32 h-32 md:h-64 border-4 border-indigo-400 rounded-2xl md:rounded-[50%] flex items-center justify-center p-4 bg-indigo-50 shadow-2xl shadow-indigo-100">
+                <SectionBox 
+                    title={framework.sections[2].name}
+                    notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
+                    onAddNote={() => onAddNote(framework.sections[2].id)}
+                    onNoteDelete={onNoteDelete}
+                    onNoteUpdate={onNoteUpdate}
+                    onClick={() => onSectionClick(framework.sections[2].name)}
+                    framework={framework}
+                    className="border-none shadow-none bg-transparent"
+                />
+              </div>
+            </div>
+            <ArrowRight className="text-slate-300 rotate-90 md:rotate-0" />
+
+            {/* Barriers Mitigate */}
+            <div className="flex flex-col gap-4 w-full md:flex-1">
+              <SectionBox 
+                title={framework.sections[3].name}
+                notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
+                onAddNote={() => onAddNote(framework.sections[3].id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(framework.sections[3].name)}
+                framework={framework}
+              />
+            </div>
+            <ArrowRight className="text-slate-300 rotate-90 md:rotate-0" />
+
+            {/* Consequences */}
+            <div className="flex flex-col gap-4 w-full md:flex-1">
+              <SectionBox 
+                title={framework.sections[4].name}
+                notes={notes.filter(n => n.sectionId === framework.sections[4].id)}
+                onAddNote={() => onAddNote(framework.sections[4].id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(framework.sections[4].name)}
+                framework={framework}
+              />
+            </div>
+          </div>
+        );
+      case 'force-field':
+        return (
+          <div className="relative w-full max-w-5xl min-h-[600px] bg-white border border-slate-200 rounded-3xl overflow-hidden p-4 md:p-8 flex flex-col gap-8">
+            <div className="text-center">
+                <h3 className="text-lg md:text-xl font-black text-slate-800 uppercase tracking-widest">Force Field Analysis</h3>
+                <div className="h-1 w-24 bg-indigo-600 mx-auto mt-2" />
+            </div>
+            
+            <div className="flex flex-col md:flex-row flex-1 gap-6 md:gap-12 relative">
+                <div className="absolute left-1/2 top-0 bottom-0 w-1 bg-slate-100 -translate-x-1/2 hidden md:block z-0" />
+                
+                {/* Driving Forces */}
+                <div className="flex-1 flex flex-col gap-4 z-10 px-2 md:px-0">
+                    <div className="flex items-center justify-between mb-4">
+                        <span className="text-sm font-black text-emerald-600 uppercase tracking-wider flex items-center gap-2">
+                             Driving Forces <ArrowRight size={16} />
+                        </span>
+                        <button 
+                            onClick={() => onAddNote(framework.sections[0].id)}
+                            className="h-8 w-8 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center hover:bg-emerald-600 hover:text-white transition-all"
+                        >
+                            <Plus size={16} />
+                        </button>
+                    </div>
+                    <div className="space-y-4">
+                        {notes.filter(n => n.sectionId === framework.sections[0].id).map(note => (
+                            <StickyNoteCard 
+                                key={note.id} 
+                                note={note} 
+                                onDelete={() => onNoteDelete(note.id)}
+                                onUpdate={(u) => onNoteUpdate(note.id, u)}
+                                sections={framework.sections}
+                                color={COLORS[0]}
+                            />
+                        ))}
+                    </div>
+                </div>
+
+                {/* Restraining Forces */}
+                <div className="flex-1 flex flex-col gap-4 z-10 text-right">
+                    <div className="flex items-center justify-between mb-4 flex-row-reverse">
+                        <span className="text-sm font-black text-rose-600 uppercase tracking-wider flex items-center gap-2">
+                            <ArrowRight className="rotate-180" size={16} /> Restraining Forces
+                        </span>
+                        <button 
+                            onClick={() => onAddNote(framework.sections[1].id)}
+                            className="h-8 w-8 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center hover:bg-rose-600 hover:text-white transition-all"
+                        >
+                            <Plus size={16} />
+                        </button>
+                    </div>
+                    <div className="space-y-4">
+                        {notes.filter(n => n.sectionId === framework.sections[1].id).map(note => (
+                            <StickyNoteCard 
+                                key={note.id} 
+                                note={note} 
+                                onDelete={() => onNoteDelete(note.id)}
+                                onUpdate={(u) => onNoteUpdate(note.id, u)}
+                                sections={framework.sections}
+                                color={COLORS[1]}
+                            />
+                        ))}
+                    </div>
+                </div>
+            </div>
+          </div>
+        );
+      default:
+        return <div>Layout not implemented</div>;
+    }
+  };
+
+  return (
+    <div className="transition-all duration-700">
+      {renderLayout()}
+    </div>
+  );
+}
+
+const SectionBox: React.FC<{ 
+  title: string; 
+  notes: StickyNote[];
+  onAddNote: () => void;
+  onNoteDelete: (id: string) => void;
+  onNoteUpdate: (id: string, updates: Partial<StickyNote>) => void;
+  onClick?: () => void;
+  framework: Framework;
+  className?: string; 
+  style?: React.CSSProperties;
+  small?: boolean;
+}> = ({ 
+  title, 
+  notes, 
+  onAddNote, 
+  onNoteDelete, 
+  onNoteUpdate,
+  onClick,
+  framework,
+  className = "", 
+  style = {},
+  small = false 
+}) => {
+  return (
+    <div 
+      className={`group relative flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-indigo-400 hover:shadow-md cursor-pointer ${className}`}
+      style={style}
+      onClick={onClick}
+    >
+      <div className={`flex items-center justify-between ${small ? 'px-2 py-1.5' : 'px-4 py-3'} border-b border-slate-50`}>
+        <h3 className={`font-bold tracking-tight text-slate-700 uppercase ${small ? 'text-[8px]' : 'text-xs tracking-widest'}`}>{title}</h3>
+        <button 
+          onClick={(e) => {
+            e.stopPropagation();
+            onAddNote();
+          }}
+          className="rounded p-1 text-slate-300 transition-all hover:bg-indigo-600 hover:text-white"
+        >
+          <Plus size={small ? 10 : 14} />
+        </button>
+      </div>
+      <div className={`flex flex-1 flex-wrap content-start gap-2 ${small ? 'p-1.5' : 'p-3'} overflow-y-auto min-h-0`}>
+        {notes.length === 0 && (
+           <div className="flex w-full h-full items-center justify-center opacity-40">
+              <span className="text-[8px] font-bold uppercase tracking-widest text-slate-200">Empty Section</span>
+           </div>
+        )}
+        {notes.map(note => (
+          <StickyNoteCard 
+            key={note.id} 
+            note={note} 
+            onDelete={() => onNoteDelete(note.id)}
+            onUpdate={(u) => onNoteUpdate(note.id, u)}
+            sections={framework.sections}
+            compact={small}
+          />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+const StickyNoteCard: React.FC<{ 
+  note: StickyNote; 
+  onDelete: () => void; 
+  onUpdate: (updates: Partial<StickyNote>) => void;
+  sections?: FrameworkSection[];
+  compact?: boolean;
+}> = ({ 
+  note, 
+  onDelete, 
+  onUpdate,
+  sections = [],
+  compact = false 
+}) => {
+  const [showMenu, setShowMenu] = useState(false);
+
+  return (
+    <motion.div
+      initial={{ scale: 0.95, opacity: 0 }}
+      animate={{ scale: 1, opacity: 1 }}
+      className={`relative ${compact ? 'h-16 w-16 p-1.5 rounded-md' : 'h-28 w-32 p-2 rounded-lg'} ${note.color} border border-black/5 flex flex-col shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 group/note`}
+    >
+      <div className="flex items-center justify-between mb-1">
+         <div className="h-1 w-4 rounded-full bg-black/10" />
+         <div className="flex items-center gap-1">
+           <button 
+            onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
+            className={`transition-all ${compact ? 'text-black/20' : 'text-black/0 group-hover/note:text-black/20 hover:!text-indigo-600'}`}
+           >
+            <ArrowRightLeft size={10} />
+           </button>
+           <button 
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className={`transition-all ${compact ? 'text-black/20' : 'text-black/0 group-hover/note:text-black/20 hover:!text-red-500'}`}
+           >
+            <Trash2 size={10} />
+           </button>
+         </div>
+      </div>
+      
+      {showMenu && sections.length > 0 && (
+        <div className="absolute top-6 left-0 right-0 z-50 bg-white border border-slate-200 rounded-lg shadow-xl p-1 animate-in fade-in zoom-in duration-200">
+          <p className="text-[7px] font-black text-slate-400 uppercase px-2 py-1 border-b border-slate-50 mb-1">Move To</p>
+          {sections.map(s => (
+            <button
+              key={s.id}
+              onClick={() => {
+                onUpdate({ sectionId: s.id });
+                setShowMenu(false);
+              }}
+              className={`w-full text-left px-2 py-1 text-[8px] rounded hover:bg-slate-50 ${note.sectionId === s.id ? 'font-bold text-indigo-600' : 'text-slate-600'}`}
+            >
+              {s.name}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <textarea
+        value={note.text}
+        onChange={(e) => onUpdate({ text: e.target.value })}
+        className={`w-full flex-1 resize-none bg-transparent font-sans leading-tight focus:outline-none placeholder:text-black/20 ${compact ? 'text-[7px]' : 'text-[9px] font-semibold'}`}
+        placeholder="Entry..."
+      />
+    </motion.div>
+  );
+}
+
