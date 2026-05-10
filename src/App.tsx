@@ -45,6 +45,10 @@ export default function App() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
+  useEffect(() => {
+    setActiveDetailSection(null);
+  }, [selectedFramework]);
+
   const isMobile = windowSize.width < 768;
   const exportRef = useRef<HTMLDivElement>(null);
 
@@ -460,8 +464,8 @@ export default function App() {
                     }
                   }}
                 >
-                  <div className={`flex h-full w-full items-center justify-center ${isMobile ? 'p-4' : 'p-20'}`}>
-                    <div ref={exportRef} className="w-full min-h-max bg-white p-12 rounded-3xl shadow-sm flex items-center justify-center scale-[0.6] sm:scale-100 origin-center transition-transform">
+                  <div className={`flex h-full w-full items-center justify-center ${isMobile ? 'p-4' : 'p-8'}`}>
+                    <div ref={exportRef} className="w-full min-h-[85vh] bg-white p-8 md:p-16 rounded-3xl shadow-sm flex items-center justify-center scale-[0.6] sm:scale-100 origin-center transition-transform overflow-visible">
                        <FrameworkVisualizer 
                         framework={selectedFramework} 
                         notes={notes} 
@@ -552,24 +556,33 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'funnel':
         return (
-          <div className="flex flex-col w-full max-w-3xl gap-4 items-center min-h-[60vh]">
-             {framework.sections.map((section, idx) => {
-                const width = 100 - (idx * 20);
-                return (
+          <div className="flex flex-col items-center gap-4 w-full max-w-2xl px-4 py-12">
+            {framework.sections.map((section, idx) => {
+              const widths = ['w-full', 'w-[85%]', 'w-[70%]', 'w-[55%]', 'w-[40%]'];
+              return (
+                <div key={section.id} className={`${widths[idx]} relative flex flex-col items-center`}>
                   <SectionBox 
-                    key={section.id} 
-                    title={section.name} 
-                    className="rounded-3xl border border-indigo-100 bg-white/50 shadow-sm flex items-center justify-center overflow-hidden"
-                    style={{ width: `${width}%`, flex: 1 }}
+                    title={`${idx + 1}. ${section.name}`}
                     notes={notes.filter(n => n.sectionId === section.id)}
                     onAddNote={() => onAddNote(section.id)}
                     onNoteDelete={onNoteDelete}
                     onNoteUpdate={onNoteUpdate}
                     onClick={() => onSectionClick(section.name)}
                     framework={framework}
+                    className="py-10 min-h-[140px] border-b-8 border-b-indigo-500 shadow-2xl bg-white/95 rounded-3xl"
                   />
-                );
-             })}
+                  {idx < framework.sections.length - 1 && (
+                    <motion.div 
+                      animate={{ y: [0, 8, 0] }}
+                      transition={{ duration: 2, repeat: Infinity }}
+                      className="text-slate-200 py-4"
+                    >
+                      <ChevronRight className="rotate-90" size={32} />
+                    </motion.div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         );
       case 'circles':
@@ -720,12 +733,12 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'pyramid':
         return (
-          <div className={`flex flex-col items-center justify-center gap-4 w-full max-w-4xl px-4 ${isMobile ? 'scale-90' : ''}`}>
-            <div className="flex flex-col items-center gap-2 w-full">
-              {framework.sections.map((section, idx) => {
-                const width = 100 - ((framework.sections.length - 1 - idx) * (isMobile ? 10 : 15));
+          <div className={`flex flex-col items-center justify-center gap-4 w-full max-w-5xl px-8 py-12 ${isMobile ? 'scale-90' : ''}`}>
+            <div className="flex flex-col items-center gap-3 w-full">
+              {[...framework.sections].reverse().map((section, idx) => {
+                const width = 100 - ((framework.sections.length - 1 - idx) * (isMobile ? 12 : 15));
                 return (
-                  <div key={section.id} className="w-full" style={{ maxWidth: `${width}%` }}>
+                  <div key={section.id} className="w-full flex justify-center" style={{ maxWidth: `${width}%` }}>
                     <SectionBox 
                       title={section.name}
                       notes={notes.filter(n => n.sectionId === section.id)}
@@ -734,8 +747,8 @@ const FrameworkVisualizer: React.FC<{
                       onNoteUpdate={onNoteUpdate}
                       onClick={() => onSectionClick(section.name)}
                       framework={framework}
-                      className={`${idx === 0 ? 'rounded-t-3xl' : idx === framework.sections.length - 1 ? 'rounded-b-3xl' : 'rounded-none'} border-indigo-200`}
-                      small={isMobile || idx < 2}
+                      className={`${idx === 0 ? 'rounded-t-[80px]' : idx === framework.sections.length - 1 ? 'rounded-none border-b-8 border-b-indigo-600' : 'rounded-none'} border-indigo-200 bg-white/95 shadow-xl py-10`}
+                      small={isMobile && idx < 2}
                     />
                   </div>
                 );
@@ -1117,36 +1130,6 @@ const FrameworkVisualizer: React.FC<{
             <div className={`${isMobile ? 'w-20 h-20 text-xs' : 'w-32 h-32 text-xl'} rounded-full border-4 border-dashed border-slate-100 flex items-center justify-center text-slate-300 font-black uppercase tracking-tighter`}>
                 CYCLE
             </div>
-          </div>
-        );
-      case 'funnel':
-        return (
-          <div className="flex flex-col items-center gap-6 w-[90vw]">
-            {framework.sections.map((section, idx) => (
-              <div 
-                key={section.id} 
-                className="flex items-center gap-8 group"
-                style={{ width: `${100 - (idx * 20)}%` }}
-              >
-                <div className="flex-1">
-                  <SectionBox 
-                    title={`${idx + 1}. ${section.name}`}
-                    notes={notes.filter(n => n.sectionId === section.id)}
-                    onAddNote={() => onAddNote(section.id)}
-                    onNoteDelete={onNoteDelete}
-                    onNoteUpdate={onNoteUpdate}
-                    onClick={() => onSectionClick(section.name)}
-                    framework={framework}
-                    className="border-indigo-100 shadow-lg shadow-indigo-50/50"
-                  />
-                </div>
-                {idx < framework.sections.length - 1 && (
-                  <div className="h-12 flex flex-col items-center justify-center -mb-8">
-                     <div className="w-px h-full bg-indigo-200 border-l border-dashed border-indigo-300" />
-                  </div>
-                )}
-              </div>
-            ))}
           </div>
         );
       case 'hype-cycle':
@@ -1599,10 +1582,10 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'hoq':
         return (
-          <div className={`relative flex flex-col items-center justify-center p-8 ${isMobile ? 'w-full scale-[0.6] origin-top -mt-20' : 'w-[95vw] h-[80vh]'}`}>
-            <div className="relative flex flex-col items-center">
+          <div className={`relative flex flex-col items-center justify-center p-8 ${isMobile ? 'w-full scale-[0.6] origin-top' : 'w-full max-w-6xl min-h-[800px]'}`}>
+            <div className="relative flex flex-col items-center w-full">
               {/* Roof */}
-              <div className="w-64 h-32 bg-slate-100 border-2 border-slate-300 relative [clip-path:polygon(50%_0%,100%_100%,0%_100%)] mb-[-2px] flex items-end justify-center pb-2">
+              <div className="w-80 h-40 bg-slate-50 border-2 border-slate-200 relative [clip-path:polygon(50%_0%,100%_100%,0%_100%)] mb-[-2px] flex items-end justify-center pb-4">
                 <SectionBox 
                   title={framework.sections[3].name}
                   notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
@@ -1612,13 +1595,13 @@ const FrameworkVisualizer: React.FC<{
                   onClick={() => onSectionClick(framework.sections[3].name)}
                   framework={framework}
                   small
-                  className="w-48 bg-white/50"
+                  className="w-56 bg-white/50 border-none shadow-none"
                 />
               </div>
               {/* Body */}
-              <div className={`flex ${isMobile ? 'flex-col gap-4' : 'gap-2'}`}>
+              <div className={`flex items-stretch ${isMobile ? 'flex-col gap-6' : 'gap-4'} w-full`}>
                 {/* Left Panel */}
-                <div className={`${isMobile ? 'w-full' : 'w-64'} flex flex-col gap-2 justify-center`}>
+                <div className={`${isMobile ? 'w-full' : 'flex-1'} flex flex-col gap-4 justify-center`}>
                    <SectionBox 
                       title={framework.sections[0].name}
                       notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
@@ -1627,11 +1610,11 @@ const FrameworkVisualizer: React.FC<{
                       onNoteUpdate={onNoteUpdate}
                       onClick={() => onSectionClick(framework.sections[0].name)}
                       framework={framework}
-                      className="border-r-4 border-r-indigo-500"
+                      className="border-r-8 border-r-indigo-500 h-full py-12"
                    />
                 </div>
                 {/* Center Grid */}
-                <div className={`${isMobile ? 'w-full' : 'w-96'} h-96 bg-slate-50 border-2 border-slate-200 rounded-lg flex items-center justify-center`}>
+                <div className={`${isMobile ? 'w-full' : 'flex-[2]'} min-h-[400px] bg-slate-50 border-2 border-slate-200 rounded-xl flex items-center justify-center p-8 shadow-inner`}>
                    <SectionBox 
                       title={framework.sections[2].name}
                       notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
@@ -1644,7 +1627,7 @@ const FrameworkVisualizer: React.FC<{
                    />
                 </div>
                 {/* Right Panel */}
-                <div className={`${isMobile ? 'w-full' : 'w-64'} flex flex-col gap-2`}>
+                <div className={`${isMobile ? 'w-full' : 'flex-1'} flex flex-col gap-4`}>
                    <SectionBox 
                       title={framework.sections[1].name}
                       notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
@@ -1690,46 +1673,42 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'iceberg':
         return (
-          <div className="relative w-[90vw] h-[80vh] flex items-center justify-center">
+          <div className="relative w-full max-w-5xl h-[900px] flex items-center justify-center py-20 px-4">
             {/* Water Line */}
-            <div className="absolute top-1/4 left-0 w-full h-1 bg-blue-400/30 blur-sm" />
+            <div className="absolute top-[25%] left-0 w-full h-1.5 bg-blue-400 opacity-20 blur-[1px] z-10" />
+            <div className="absolute top-[25%] left-8 text-[12px] font-black text-blue-500/40 uppercase tracking-widest -translate-y-6">Visible Layer</div>
+            <div className="absolute top-[25%] left-8 text-[12px] font-black text-indigo-500/40 uppercase tracking-widest translate-y-2">Underlying Structure</div>
             
-            <div className="relative w-[600px] h-full flex flex-col items-center">
-               <svg className="absolute inset-0 w-full h-full" viewBox="0 0 600 800">
+            <div className="relative w-full h-full flex flex-col items-center">
+               <svg className="absolute inset-0 w-full h-full drop-shadow-2xl" viewBox="0 0 600 800">
                   <path 
-                    d="M 300 50 L 550 750 L 50 750 Z" 
+                    d="M 300 20 L 580 780 L 20 780 Z" 
                     fill="#f8fafc" 
                     stroke="#e2e8f0" 
-                    strokeWidth="2"
+                    strokeWidth="4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
                   />
                </svg>
                
-               <div className="relative z-10 w-full h-full flex flex-col gap-8 p-12">
+               <div className="relative z-20 w-full h-full flex flex-col gap-12 p-16">
                   {framework.sections.map((section, idx) => {
-                     const mt = [0, 40, 100, 150];
-                     const widths = ['w-1/3', 'w-1/2', 'w-2/3', 'w-full'];
+                     const widths = ['w-[30%]', 'w-[45%]', 'w-[65%]', 'w-[85%]'];
                      return (
                        <div 
                          key={section.id} 
-                         className={`flex flex-col items-center self-center ${idx === 0 ? 'mt-0' : ''}`}
-                         style={{ marginTop: idx === 0 ? 0 : 20 }}
+                         className={`flex flex-col items-center self-center transition-all hover:scale-[1.03] ${widths[idx]}`}
                        >
-                          <div className={`${widths[idx]} text-center`}>
-                             <SectionBox 
-                                title={section.name}
-                                notes={notes.filter(n => n.sectionId === section.id)}
-                                onAddNote={() => onAddNote(section.id)}
-                                onNoteDelete={onNoteDelete}
-                                onNoteUpdate={onNoteUpdate}
-                                onClick={() => onSectionClick(section.name)}
-                                framework={framework}
-                                small
-                                className={`bg-white/80 backdrop-blur-sm border-slate-200 ${idx === 0 ? 'shadow-indigo-100 shadow-lg' : ''}`}
-                             />
-                          </div>
-                          {idx === 0 && (
-                            <div className="mt-4 px-3 py-1 bg-blue-500 text-white text-[8px] font-black uppercase tracking-widest rounded-full">Visible</div>
-                          )}
+                         <SectionBox 
+                            title={section.name}
+                            notes={notes.filter(n => n.sectionId === section.id)}
+                            onAddNote={() => onAddNote(section.id)}
+                            onNoteDelete={onNoteDelete}
+                            onNoteUpdate={onNoteUpdate}
+                            onClick={() => onSectionClick(section.name)}
+                            framework={framework}
+                            className={`w-full py-10 shadow-2xl bg-white/95 backdrop-blur-md rounded-2xl border-2 ${idx === 0 ? 'border-blue-400' : 'border-slate-100'}`}
+                         />
                        </div>
                      );
                   })}
@@ -1739,10 +1718,10 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'congruence':
         return (
-          <div className="relative w-[95vw] h-[70vh] flex items-center justify-between gap-4 px-12">
+          <div className="relative w-full max-w-6xl min-h-[700px] flex flex-col lg:flex-row items-center justify-between gap-12 px-8 py-16 bg-slate-50/30 rounded-[60px] border border-slate-100 shadow-inner">
             {/* Inputs */}
-            <div className="flex flex-col gap-4 w-64">
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Inputs</div>
+            <div className="flex flex-col gap-6 w-full lg:w-80">
+              <div className="text-[14px] font-black text-slate-400 uppercase tracking-widest px-4">The Input Layer</div>
               <SectionBox 
                 title={framework.sections[0].name}
                 notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
@@ -1751,19 +1730,16 @@ const FrameworkVisualizer: React.FC<{
                 onNoteUpdate={onNoteUpdate}
                 onClick={() => onSectionClick(framework.sections[0].name)}
                 framework={framework}
-                className="border-indigo-200 bg-indigo-50/10"
+                className="border-indigo-400 bg-white shadow-2xl py-12"
               />
             </div>
 
-            {/* Transition Arrow */}
-            <div className="text-slate-200"><ArrowRight size={32} /></div>
+            <ArrowRight className="text-slate-300 rotate-90 lg:rotate-0 hidden lg:block" size={48} />
 
-            {/* Components Grid */}
-            <div className="flex-1 max-w-4xl grid grid-cols-2 grid-rows-2 gap-8 p-12 border-4 border-dashed border-slate-100 rounded-[3rem] relative">
-               <div className="absolute top-1/2 left-0 -translate-y-1/2 -ml-8 w-16 h-1 bg-gradient-to-r from-slate-200 to-transparent" />
-               <div className="absolute top-1/2 right-0 -translate-y-1/2 -mr-8 w-16 h-1 bg-gradient-to-l from-slate-200 to-transparent" />
-               
-               {framework.sections.slice(1, 5).map((section, idx) => (
+            {/* Components Container */}
+            <div className="flex-1 w-full max-w-4xl p-12 bg-white rounded-[50px] shadow-2xl border-4 border-slate-50 relative grid grid-cols-1 md:grid-cols-2 gap-10">
+               <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-2 rounded-full text-[14px] font-black uppercase tracking-widest">Congruence Engine</div>
+               {framework.sections.slice(1, 5).map((section) => (
                   <SectionBox 
                     key={section.id}
                     title={section.name}
@@ -1773,18 +1749,16 @@ const FrameworkVisualizer: React.FC<{
                     onNoteUpdate={onNoteUpdate}
                     onClick={() => onSectionClick(section.name)}
                     framework={framework}
-                    className="shadow-inner bg-white"
+                    className="min-h-[220px] bg-slate-50/50 hover:bg-white transition-colors"
                   />
                ))}
-               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 bg-slate-50 px-4 py-2 rounded-full border border-slate-200 text-[10px] font-bold text-slate-400 uppercase tracking-widest z-10">Congruence</div>
             </div>
 
-            {/* Transition Arrow */}
-            <div className="text-slate-200"><ArrowRight size={32} /></div>
+            <ArrowRight className="text-slate-300 rotate-90 lg:rotate-0 hidden lg:block" size={48} />
 
             {/* Outputs */}
-            <div className="flex flex-col gap-4 w-64">
-              <div className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Outputs</div>
+            <div className="flex flex-col gap-6 w-full lg:w-80">
+              <div className="text-[14px] font-black text-slate-400 uppercase tracking-widest px-4">The Output Layer</div>
               <SectionBox 
                 title={framework.sections[5].name}
                 notes={notes.filter(n => n.sectionId === framework.sections[5].id)}
@@ -1793,7 +1767,7 @@ const FrameworkVisualizer: React.FC<{
                 onNoteUpdate={onNoteUpdate}
                 onClick={() => onSectionClick(framework.sections[5].name)}
                 framework={framework}
-                className="border-emerald-200 bg-emerald-50/10"
+                className="border-emerald-400 bg-white shadow-2xl py-12"
               />
             </div>
           </div>
@@ -1980,13 +1954,21 @@ const FrameworkVisualizer: React.FC<{
           <div className="relative w-full max-w-2xl aspect-square flex items-center justify-center p-4 md:p-12 scale-[0.9] md:scale-100">
             {/* Horizontal Axis */}
             <div className="absolute left-0 right-0 top-1/2 h-1 bg-slate-200 -translate-y-1/2" />
-            <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">Low</div>
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">High</div>
+            <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+              {framework.matrixLabels?.x?.low || 'Low'}
+            </div>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+              {framework.matrixLabels?.x?.high || 'High'}
+            </div>
             
             {/* Vertical Axis */}
             <div className="absolute top-0 bottom-0 left-1/2 w-1 bg-slate-200 -translate-x-1/2" />
-            <div className="absolute left-1/2 bottom-2 -translate-x-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">Low</div>
-            <div className="absolute left-1/2 top-2 -translate-x-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">High</div>
+            <div className="absolute left-1/2 bottom-2 -translate-x-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+              {framework.matrixLabels?.y?.low || 'Low'}
+            </div>
+            <div className="absolute left-1/2 top-2 -translate-x-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">
+              {framework.matrixLabels?.y?.high || 'High'}
+            </div>
 
             <div className="grid grid-cols-2 grid-rows-2 gap-4 md:gap-12 w-full h-full">
               {framework.sections.map((section, idx) => {
@@ -2064,92 +2046,53 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'x-matrix':
         return (
-          <div className="relative w-full max-w-2xl aspect-square bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xl flex items-center justify-center p-4">
-            <div className="absolute inset-0 grid grid-cols-2 grid-rows-2">
-                <div className="border-r border-b border-slate-100 bg-slate-50/20" />
-                <div className="border-b border-slate-100" />
-                <div className="border-r border-slate-100" />
-                <div className="bg-slate-50/20" />
-            </div>
-
-            <div className="relative z-10 w-full h-full flex items-center justify-center">
+          <div className="relative w-full max-w-5xl aspect-square bg-slate-900 border-[12px] border-slate-900 rounded-[80px] overflow-hidden shadow-2xl p-4">
+            <div className="absolute inset-0 border-[20px] border-white/5 rounded-[70px] pointer-events-none" />
+            
+            <div className="relative z-10 w-full h-full grid grid-cols-2 grid-rows-2 gap-12 p-8">
                 {/* Center Core */}
-                <div className="absolute w-16 h-16 md:w-32 md:h-32 rotate-45 border-2 border-slate-200 bg-white z-50 flex items-center justify-center shadow-lg">
-                    <div className="-rotate-45 font-black text-center text-slate-800 text-[6px] md:text-[10px] uppercase tracking-tighter">Hoshin<br/>Kanri</div>
+                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-48 h-48 rotate-45 border-8 border-slate-900 bg-white z-[60] flex items-center justify-center shadow-2xl">
+                    <div className="-rotate-45 font-black text-center text-slate-900 text-[18px] uppercase tracking-tighter leading-none">Hoshin<br/>Kanri</div>
                 </div>
 
-                {/* Quadrants */}
-                <div className="absolute top-0 w-32 md:w-64 h-32 md:h-64">
-                    <SectionBox 
-                        title={framework.sections[2].name}
-                        notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
-                        onAddNote={() => onAddNote(framework.sections[2].id)}
-                        onNoteDelete={onNoteDelete}
-                        onNoteUpdate={onNoteUpdate}
-                        onClick={() => onSectionClick(framework.sections[2].name)}
-                        framework={framework}
-                        className="h-full border-indigo-200 shadow-indigo-100"
-                        small
-                    />
-                </div>
-                <div className="absolute bottom-0 w-32 md:w-64 h-32 md:h-64">
-                    <SectionBox 
-                        title={framework.sections[0].name}
-                        notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
-                        onAddNote={() => onAddNote(framework.sections[0].id)}
-                        onNoteDelete={onNoteDelete}
-                        onNoteUpdate={onNoteUpdate}
-                        onClick={() => onSectionClick(framework.sections[0].name)}
-                        framework={framework}
-                        className="h-full border-emerald-200 shadow-emerald-100"
-                        small
-                    />
-                </div>
-                <div className="absolute left-0 w-32 md:w-64 h-32 md:h-64">
-                    <SectionBox 
-                        title={framework.sections[1].name}
-                        notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
-                        onAddNote={() => onAddNote(framework.sections[1].id)}
-                        onNoteDelete={onNoteDelete}
-                        onNoteUpdate={onNoteUpdate}
-                        onClick={() => onSectionClick(framework.sections[1].name)}
-                        framework={framework}
-                        className="h-full border-blue-200 shadow-blue-100"
-                        small
-                    />
-                </div>
-                <div className="absolute right-0 w-32 md:w-64 h-32 md:h-64">
-                    <SectionBox 
-                        title={framework.sections[3].name}
-                        notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
-                        onAddNote={() => onAddNote(framework.sections[3].id)}
-                        onNoteDelete={onNoteDelete}
-                        onNoteUpdate={onNoteUpdate}
-                        onClick={() => onSectionClick(framework.sections[3].name)}
-                        framework={framework}
-                        className="h-full border-purple-200 shadow-purple-100"
-                        small
-                    />
-                </div>
+                {framework.sections.map((section, idx) => {
+                  const colors = ['border-indigo-500', 'border-emerald-500', 'border-amber-500', 'border-rose-500'];
+                  return (
+                    <div key={section.id} className="relative w-full h-full group">
+                        <SectionBox 
+                            title={section.name}
+                            notes={notes.filter(n => n.sectionId === section.id)}
+                            onAddNote={() => onAddNote(section.id)}
+                            onNoteDelete={onNoteDelete}
+                            onNoteUpdate={onNoteUpdate}
+                            onClick={() => onSectionClick(section.name)}
+                            framework={framework}
+                            className={`h-full py-12 bg-white/95 border-t-8 ${colors[idx]} shadow-2xl rounded-3xl transition-transform group-hover:scale-[1.02]`}
+                        />
+                    </div>
+                  );
+                })}
             </div>
           </div>
         );
       case 'fishbone':
         return (
-          <div className="relative w-full max-w-6xl aspect-video flex items-center justify-center p-4">
+          <div className="relative w-full max-w-7xl aspect-[21/9] flex items-center justify-center p-12 bg-slate-50/30 rounded-[80px] shadow-inner mb-20">
             {/* Spine */}
-            <div className="absolute h-1 bg-slate-200 left-4 md:left-8 right-24 md:right-32 rounded-full" />
-            <div className="absolute right-4 md:right-8 w-16 h-16 md:w-24 md:h-24 border-l-4 border-b-4 border-slate-300 rotate-[-45deg] flex items-center justify-center">
-                <div className="rotate-[45deg] font-black text-slate-800 uppercase tracking-tighter text-center text-[8px] md:text-[10px]">PROBLEM<br/>HEAD</div>
+            <div className="absolute h-4 bg-slate-900 left-12 right-64 rounded-full shadow-2xl z-0" />
+            <div className="absolute right-12 w-48 h-48 bg-slate-900 rounded-3xl shadow-2xl flex items-center justify-center p-6 text-white z-20 border-[12px] border-white">
+                <div className="font-black text-center text-[18px] uppercase leading-tight tracking-tighter">
+                   Core<br/>Problem<br/>Statement
+                </div>
             </div>
 
             {/* Bone Rows */}
-            <div className="absolute inset-0 flex flex-col justify-between py-6 md:py-12 px-12 md:px-32">
+            <div className="absolute inset-0 flex flex-col justify-between py-20 px-48">
                 <div className="flex justify-around items-start">
                     {framework.sections.slice(0, 3).map((section, idx) => (
-                        <div key={section.id} className="relative w-24 md:w-48 pt-4 md:pt-8">
+                        <div key={section.id} className="relative w-64 pt-12 group">
                              {/* Diagonal Bone */}
-                            <div className="absolute bottom-full left-1/2 w-px h-12 md:h-24 bg-slate-200 -rotate-[30deg] origin-bottom" />
+                            <div className="absolute bottom-[100%] left-1/2 w-2 h-48 bg-slate-200 -rotate-[35deg] origin-bottom transition-colors group-hover:bg-indigo-200" />
                             <SectionBox 
                                 title={section.name} 
                                 notes={notes.filter(n => n.sectionId === section.id)}
@@ -2158,17 +2101,16 @@ const FrameworkVisualizer: React.FC<{
                                 onNoteUpdate={onNoteUpdate}
                                 onClick={() => onSectionClick(section.name)}
                                 framework={framework}
-                                className="bg-white/80 backdrop-blur-sm"
-                                small
+                                className="bg-white shadow-2xl py-8 border-t-8 border-indigo-400"
                             />
                         </div>
                     ))}
                 </div>
                 <div className="flex justify-around items-end">
                     {framework.sections.slice(3, 6).map((section, idx) => (
-                        <div key={section.id} className="relative w-24 md:w-48 pb-4 md:pb-8">
+                        <div key={section.id} className="relative w-64 pb-12 group">
                             {/* Diagonal Bone */}
-                            <div className="absolute top-full left-1/2 w-px h-12 md:h-24 bg-slate-200 rotate-[30deg] origin-top" />
+                            <div className="absolute top-[100%] left-1/2 w-2 h-48 bg-slate-200 rotate-[35deg] origin-top transition-colors group-hover:bg-rose-200" />
                             <SectionBox 
                                 title={section.name} 
                                 notes={notes.filter(n => n.sectionId === section.id)}
@@ -2177,8 +2119,7 @@ const FrameworkVisualizer: React.FC<{
                                 onNoteUpdate={onNoteUpdate}
                                 onClick={() => onSectionClick(section.name)}
                                 framework={framework}
-                                className="bg-white/80 backdrop-blur-sm"
-                                small
+                                className="bg-white shadow-2xl py-8 border-b-8 border-rose-400"
                             />
                         </div>
                     ))}
@@ -2421,8 +2362,8 @@ const SectionBox: React.FC<{
       style={style}
       onClick={onClick}
     >
-      <div className={`flex items-center justify-between ${small ? 'px-2 py-1.5' : 'px-4 py-3'} border-b border-slate-50`}>
-        <h3 className={`font-bold tracking-tight text-slate-700 uppercase ${small ? 'text-[8px]' : 'text-xs tracking-widest'}`}>{title}</h3>
+      <div className={`flex items-center justify-between ${small ? 'px-3 py-2' : 'px-5 py-4'} border-b border-slate-50`}>
+        <h3 className={`font-black tracking-tight text-slate-800 uppercase ${small ? 'text-[10px]' : 'text-sm tracking-widest'}`}>{title}</h3>
         <button 
           onClick={(e) => {
             e.stopPropagation();

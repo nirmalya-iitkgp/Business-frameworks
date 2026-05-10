@@ -816,7 +816,7 @@ export const FRAMEWORKS: Framework[] = [
     name: 'JTBD Canvas',
     description: 'Mapping the job a customer is trying to accomplish.',
     category: 'Strategy & Innovation',
-    layout: 'bmc',
+    layout: 'grid',
     sections: [
       { id: 'Job', name: 'The Job', details: ['Primary task'] },
       { id: 'Outcomes', name: 'Desired Outcomes', details: ['Success metrics'] },
@@ -1860,6 +1860,40 @@ export const FRAMEWORKS: Framework[] = [
       { id: 'Executing', name: 'Executing', details: ['Deliverables'] },
       { id: 'Monitoring', name: 'Monitoring', details: ['Quality and risk'] },
       { id: 'Closing', name: 'Closing', details: ['Project finalization'] }
+    ]
+  },
+  {
+    id: 'bcg-matrix',
+    name: 'BCG Matrix',
+    description: 'Growth-Share Matrix for portfolio analysis.',
+    category: 'Strategy & Innovation',
+    layout: 'matrix',
+    matrixLabels: {
+      x: { low: 'High Share', high: 'Low Share' },
+      y: { low: 'Low Growth', high: 'High Growth' }
+    },
+    sections: [
+      { id: 'Stars', name: 'Stars', details: ['High growth, High share', 'Invest for growth'] },
+      { id: 'QuestionMarks', name: 'Question Marks', details: ['High growth, Low share', 'Analyze potential'] },
+      { id: 'CashCows', name: 'Cash Cows', details: ['Low growth, High share', 'Milk for cash'] },
+      { id: 'Dogs', name: 'Dogs', details: ['Low growth, Low share', 'Divest or liquidate'] }
+    ]
+  },
+  {
+    id: 'ansoff-matrix',
+    name: 'Ansoff Matrix',
+    description: 'Product/Market expansion grid for growth strategy.',
+    category: 'Strategy & Innovation',
+    layout: 'matrix',
+    matrixLabels: {
+      x: { low: 'Existing Products', high: 'New Products' },
+      y: { low: 'Existing Markets', high: 'New Markets' }
+    },
+    sections: [
+      { id: 'MarketDevelopment', name: 'Market Development', details: ['Existing product, New market'] },
+      { id: 'Diversification', name: 'Diversification', details: ['New product, New market'] },
+      { id: 'MarketPenetration', name: 'Market Penetration', details: ['Existing product, Existing market'] },
+      { id: 'ProductDevelopment', name: 'Product Development', details: ['New product, Existing market'] }
     ]
   }
 ];
