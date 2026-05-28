@@ -1839,7 +1839,7 @@ export const FRAMEWORKS: Framework[] = [
     name: 'Strategy Diamond',
     description: 'Five integrated elements of a strategy.',
     category: 'Strategy & Innovation',
-    layout: 'diamond',
+    layout: 'strategy-diamond',
     sections: [
       { id: 'Arenas', name: 'Arenas', details: ['Where will we be active?'] },
       { id: 'Vehicles', name: 'Vehicles', details: ['How will we get there?'] },

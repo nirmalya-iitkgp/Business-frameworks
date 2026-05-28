@@ -39,6 +39,8 @@ export default function App() {
   const [activeDetailSection, setActiveDetailSection] = useState<string | null>(null);
   const [windowSize, setWindowSize] = useState({ width: window.innerWidth, height: window.innerHeight });
 
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+
   useEffect(() => {
     const handleResize = () => setWindowSize({ width: window.innerWidth, height: window.innerHeight });
     window.addEventListener('resize', handleResize);
@@ -47,25 +49,46 @@ export default function App() {
 
   useEffect(() => {
     setActiveDetailSection(null);
+    setShowClearConfirm(false);
   }, [selectedFramework]);
 
-  const isMobile = windowSize.width < 768;
+  const [isExporting, setIsExporting] = useState(false);
+  const isMobile = windowSize.width < 768 && !isExporting;
   const exportRef = useRef<HTMLDivElement>(null);
 
   const exportToPng = async () => {
     if (!exportRef.current || !selectedFramework) return;
     
-    // Create a temporary container to fix scaling issues with html2canvas and CSS transforms
+    // Set exporting state to true so we render full layout and bypass any mobile columns
+    setIsExporting(true);
+    
+    // Delay 120ms to allow React to paint the desktop diagram layout
+    await new Promise(resolve => setTimeout(resolve, 120));
+    
     const element = exportRef.current;
+    
+    // Save original styles and class inline states
+    const originalStyle = element.getAttribute('style') || '';
+    const originalClassName = element.className;
+    
+    // Force standard high-fidelity widescreen dimensions on the export target
+    element.style.width = '1280px';
+    element.style.minHeight = '800px';
+    element.style.transform = 'none';
+    element.style.scale = 'none';
+    element.style.position = 'relative';
+    
+    // Replace layout scale/flicker classes temporarily with a transparent background
+    element.className = "w-[1280px] min-h-[800px] bg-transparent p-12 flex items-center justify-center overflow-visible shadow-none";
     
     try {
       const canvas = await html2canvas(element, {
-        backgroundColor: '#ffffff',
-        scale: 2,
+        backgroundColor: null,
+        scale: 2.5, // Ultra crisp high-res 
         logging: false,
         useCORS: true,
-        windowWidth: element.scrollWidth,
-        windowHeight: element.scrollHeight
+        windowWidth: 1280,
+        windowHeight: element.scrollHeight || 800
       });
       
       const dataUrl = canvas.toDataURL('image/png');
@@ -75,6 +98,15 @@ export default function App() {
       link.click();
     } catch (err) {
       console.error('Export failed:', err);
+    } finally {
+      // Restore previous reactive views instantly
+      if (originalStyle) {
+        element.setAttribute('style', originalStyle);
+      } else {
+        element.removeAttribute('style');
+      }
+      element.className = originalClassName;
+      setIsExporting(false);
     }
   };
   
@@ -109,6 +141,33 @@ export default function App() {
     setNotes(notes.filter(n => n.id !== id));
   };
 
+  const clearCurrentFrameworkNotes = () => {
+    if (!selectedFramework) return;
+    const sectionIds = selectedFramework.sections.map(s => s.id);
+    setNotes(notes.filter(n => !n.sectionId || !sectionIds.includes(n.sectionId)));
+  };
+
+  const addStarterNotes = () => {
+    if (!selectedFramework) return;
+    // Clear any existing notes for this framework first to avoid duplicate clutter
+    const sectionIds = selectedFramework.sections.map(s => s.id);
+    const existingFiltered = notes.filter(n => !n.sectionId || !sectionIds.includes(n.sectionId));
+    
+    const starterNotes: StickyNote[] = selectedFramework.sections.flatMap((section, sIdx) => {
+      // Create representative starter example nodes using details or name with high brevity
+      const examples = section.details?.slice(0, 2) || [section.name];
+      return examples.map((ex, dIdx) => ({
+        id: Math.random().toString(36).substr(2, 9),
+        text: `Example: ${ex}`,
+        color: COLORS[(sIdx + dIdx) % COLORS.length],
+        x: window.innerWidth / 2 - 75 + (Math.random() * 40 - 20),
+        y: window.innerHeight / 2 - 75 + (Math.random() * 40 - 20),
+        sectionId: section.id
+      }));
+    });
+    setNotes([...existingFiltered, ...starterNotes]);
+  };
+
   const handleZoom = (delta: number) => {
     setZoom(prev => Math.min(Math.max(prev + delta, 0.5), 2));
   };
@@ -121,31 +180,33 @@ export default function App() {
   return (
     <div className="flex h-screen w-screen flex-col bg-[#F8F9FA] text-slate-900 font-sans overflow-hidden">
       {/* Header */}
-      <header className="h-14 border-b border-slate-200 bg-white flex items-center justify-between px-6 shrink-0 z-40">
+      <header className="h-14 border-b border-slate-200/80 bg-white/70 backdrop-blur-md flex items-center justify-between px-6 shrink-0 z-40">
         <div className="flex items-center gap-3 cursor-pointer" onClick={() => setSelectedFramework(null)}>
-          <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-orange-600 rounded flex items-center justify-center text-white font-black shadow-lg shadow-orange-100">
+          <div className="w-8 h-8 bg-gradient-to-br from-amber-400 to-orange-600 rounded flex items-center justify-center text-white font-black shadow-lg shadow-amber-500/30 hover:scale-105 transition-all" title="Return to Workspace Hub">
             MC
           </div>
-          <h1 className="font-black text-lg tracking-tight uppercase italic flex items-center">
-            Modern <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-500 to-orange-600 ml-1">Chanakya</span>
-          </h1>
+          <div className="h-4 w-px bg-slate-200 mx-1" />
+          <span className="text-[10px] md:text-xs font-black text-slate-500 uppercase tracking-widest hover:text-indigo-600 transition-colors">
+            {selectedFramework ? selectedFramework.name : "Workspace Hub"}
+          </span>
         </div>
         
         <div className="flex items-center gap-4">
           <div className="relative hidden md:block">
             <input 
               type="text" 
-              placeholder="Search 200+ frameworks..." 
+              placeholder="Search 100+ strategic frameworks..." 
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-48 lg:w-80 h-9 pl-9 pr-4 text-sm bg-slate-100 border-transparent rounded-md focus:bg-white focus:ring-1 focus:ring-indigo-500 transition-all outline-none"
+              className="w-48 lg:w-80 h-9 pl-9 pr-4 text-xs bg-slate-100/80 border-transparent rounded-lg focus:bg-white focus:ring-1 focus:ring-indigo-500 transition-all outline-none"
             />
-            <Search className="w-4 h-4 absolute left-3 top-2.5 text-slate-400" />
+            <Search className="w-3.5 h-3.5 absolute left-3 top-2.5 text-slate-400" />
           </div>
           {selectedFramework && (
             <button 
               onClick={exportToPng}
-              className="h-9 px-3 md:px-4 bg-emerald-600 text-white text-[10px] md:text-xs font-bold rounded hover:bg-emerald-700 transition-colors uppercase tracking-wider whitespace-nowrap flex items-center gap-2 shadow-sm"
+              className="h-9 px-3 md:px-4 bg-emerald-600 hover:bg-emerald-700 text-white text-[10px] md:text-xs font-bold rounded-lg transition-colors uppercase tracking-wider whitespace-nowrap flex items-center gap-2 shadow-sm"
+              title="Save current framework sheet as PNG image"
             >
               <Download size={14} /> EXPORT PNG
             </button>
@@ -156,29 +217,29 @@ export default function App() {
       <div className="flex-1 flex overflow-hidden">
         {/* Sidebar */}
         <AnimatePresence>
-          {(isSidebarOpen || !isMobile) && (
+          {isSidebarOpen && (
             <motion.aside
               initial={isMobile ? { x: -300, opacity: 0 } : { width: 0, opacity: 0 }}
-              animate={isMobile ? { x: isSidebarOpen ? 0 : -300, opacity: 1 } : { width: isSidebarOpen ? 224 : 0, opacity: 1 }}
+              animate={isMobile ? { x: 0, opacity: 1 } : { width: 224, opacity: 1 }}
               exit={isMobile ? { x: -300, opacity: 0 } : { width: 0, opacity: 0 }}
-              transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-              className={`fixed md:relative z-50 md:z-30 h-full border-r border-slate-200 bg-white ${isMobile && !isSidebarOpen ? 'hidden' : ''}`}
+              transition={{ type: 'spring', damping: 22, stiffness: 180 }}
+              className={`fixed md:relative z-50 md:z-30 h-full border-r border-slate-200/80 bg-white/80 backdrop-blur-md ${isMobile && !isSidebarOpen ? 'hidden' : ''}`}
             >
               <div className="flex h-full flex-col overflow-hidden w-64 md:w-56">
-                <div className="p-4 flex items-center justify-between md:hidden">
-                  <span className="font-bold">Menu</span>
-                  <button onClick={() => setIsSidebarOpen(false)} className="p-2 border border-slate-100 rounded-lg hover:bg-slate-50">
-                    <ChevronLeft size={20} />
+                <div className="p-4 flex items-center justify-between border-b border-slate-100/50">
+                  <span className="text-[10px] font-black uppercase text-slate-700 tracking-wider">Strategy Index</span>
+                  <button 
+                    onClick={() => setIsSidebarOpen(false)} 
+                    title="Collapse sidebar menu"
+                    className="p-1.5 border border-slate-200 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-indigo-600 transition-all"
+                  >
+                    <ChevronLeft size={14} />
                   </button>
                 </div>
                 <nav className="p-4 flex-1 space-y-4 overflow-y-auto">
-              <div className="flex items-center justify-between px-3">
-                <div className="text-[10px] font-bold text-slate-400 tracking-widest uppercase">Navigation</div>
-              </div>
-
-              {Array.from(new Set(FRAMEWORKS.map(f => f.category))).map(category => (
-                <div key={category} className="space-y-1">
-                  <div className="px-3 py-1 text-[9px] font-black text-slate-300 uppercase tracking-tighter border-b border-slate-50 mb-1">{category}</div>
+              {Array.from(new Set(FRAMEWORKS.map(f => f.category))).map((category, idx) => (
+                <div key={category} className={idx === 0 ? "space-y-1" : "space-y-1 mt-5"}>
+                  <div className="px-3 py-1 text-[10px] font-bold text-slate-400 border-b border-slate-100/50 uppercase tracking-wider mb-2">{category}</div>
                   {filteredFrameworks.filter(f => f.category === category).map((f) => (
                     <button
                       key={f.id}
@@ -197,21 +258,21 @@ export default function App() {
               ))}
             </nav>
 
-            <div className="p-4 border-t border-slate-100">
-              <div className="bg-slate-900 rounded-lg p-3 shadow-inner">
-                <div className="flex items-center gap-2 mb-1">
-                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-                  <span className="text-[9px] font-bold uppercase tracking-widest text-slate-400">Contextual Info</span>
+            <div className="p-4 border-t border-slate-100/50">
+              <div className="bg-slate-800/90 backdrop-blur border border-slate-700/50 rounded-2xl p-4 shadow-xl shadow-slate-950/20">
+                <div className="flex items-center gap-2 mb-2">
+                  <div className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
+                  <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Contextual Info</span>
                 </div>
-                <p className="text-[10px] leading-tight text-slate-300 font-medium">
+                <p className="text-[11px] leading-relaxed text-slate-200 font-medium">
                   {selectedFramework 
                     ? selectedFramework.description 
                     : "Select a framework to view its strategic profile and interactive visualization."}
                 </p>
                 {selectedFramework && (
-                  <div className="mt-2 pt-2 border-t border-slate-800 flex items-center justify-between">
-                    <span className="text-[8px] font-bold text-indigo-400 uppercase">{selectedFramework.category}</span>
-                    <span className="text-[8px] font-bold text-slate-500 uppercase">{selectedFramework.layout}</span>
+                  <div className="mt-3 pt-2 border-t border-slate-700 flex items-center justify-between">
+                    <span className="text-[8px] font-bold text-indigo-300 uppercase tracking-wider">{selectedFramework.category}</span>
+                    <span className="text-[8px] font-bold text-slate-400 uppercase tracking-wider">{selectedFramework.layout}</span>
                   </div>
                 )}
               </div>
@@ -306,32 +367,105 @@ export default function App() {
           </AnimatePresence>
 
           {/* Canvas Toolbar */}
-          <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 rounded-lg border border-slate-200 bg-white p-1.5 shadow-sm">
+          <div className="absolute top-4 right-4 z-20 flex items-center gap-1.5 rounded-xl border border-slate-200/80 bg-white/80 backdrop-blur p-1.5 shadow-lg shadow-slate-200/50">
             <button 
               onClick={() => setActiveTool('pointer')}
-              className={`rounded p-2 transition-colors ${activeTool === 'pointer' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+              title="Pointer Mode - Select, Drag and Edit Notes"
+              className={`rounded-lg p-2 transition-all ${activeTool === 'pointer' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}
             >
               <Pointer size={16} />
             </button>
             <button 
               onClick={() => setActiveTool('pan')}
-              className={`rounded p-2 transition-colors ${activeTool === 'pan' ? 'bg-indigo-600 text-white' : 'text-slate-500 hover:bg-slate-100'}`}
+              title="Hand Mode - Pan/Drag the Infinite Canvas"
+              className={`rounded-lg p-2 transition-all ${activeTool === 'pan' ? 'bg-indigo-600 text-white shadow-md shadow-indigo-200' : 'text-slate-500 hover:bg-slate-100 hover:text-slate-900'}`}
             >
               <Hand size={16} />
             </button>
-            <div className="w-px h-4 bg-slate-200 mx-1" />
-            <button onClick={() => handleZoom(-0.1)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><Minimize size={16} /></button>
-            <span className="text-[10px] font-mono font-bold text-slate-400 px-1">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => handleZoom(0.1)} className="rounded p-2 text-slate-500 hover:bg-slate-100"><Maximize size={16} /></button>
+            <div className="w-px h-4 bg-slate-200 mx-1.5" />
+            <button 
+              onClick={() => handleZoom(-0.1)} 
+              title="Zoom Out Canvas" 
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all"
+            >
+              <Minimize size={16} />
+            </button>
+            <span className="text-[10px] font-mono font-extrabold text-slate-500 px-1 bg-slate-100/80 rounded-md py-1" title="Current Canvas Zoom Level">
+              {Math.round(zoom * 100)}%
+            </span>
+            <button 
+              onClick={() => handleZoom(0.1)} 
+              title="Zoom In Canvas" 
+              className="rounded-lg p-2 text-slate-500 hover:bg-slate-100 hover:text-slate-900 transition-all"
+            >
+              <Maximize size={16} />
+            </button>
+
+            {selectedFramework && notes.some(n => selectedFramework.sections.some(s => s.id === n.sectionId)) && (
+              <>
+                <div className="w-px h-4 bg-slate-200 mx-1.5" />
+                {showClearConfirm ? (
+                  <div className="flex items-center gap-1 bg-rose-50 border border-rose-100 rounded-lg p-0.5 shadow-sm animate-in fade-in zoom-in duration-150">
+                    <button
+                      onClick={() => {
+                        clearCurrentFrameworkNotes();
+                        setShowClearConfirm(false);
+                      }}
+                      className="rounded bg-rose-600 px-2 py-0.5 text-[9px] font-black text-white hover:bg-rose-700 transition-all uppercase tracking-wider"
+                    >
+                      Delete All
+                    </button>
+                    <button
+                      onClick={() => setShowClearConfirm(false)}
+                      className="rounded bg-slate-200 px-2 py-0.5 text-[9px] font-bold text-slate-600 hover:bg-slate-300 transition-all uppercase tracking-wider"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                ) : (
+                  <button 
+                    onClick={() => setShowClearConfirm(true)} 
+                    title="Clear All Board Notes" 
+                    className="rounded-lg p-2 text-rose-500 hover:bg-rose-50 hover:text-rose-600 transition-all flex items-center justify-center"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
+              </>
+            )}
           </div>
 
           {!isSidebarOpen && (
             <button
               onClick={() => setIsSidebarOpen(true)}
-              className="absolute left-4 top-4 z-30 rounded-lg border border-slate-200 bg-white p-2 text-slate-600 shadow-sm hover:bg-slate-50 md:hidden"
+              title="Open Sidebar Index"
+              className="absolute left-4 top-4 z-30 rounded-xl border border-slate-200/80 bg-white/90 backdrop-blur p-2.5 text-slate-600 shadow-lg shadow-slate-100 hover:bg-slate-50 hover:text-indigo-600 transition-all"
             >
-              <Layout size={16} />
+              <Layout size={18} />
             </button>
+          )}
+
+          {/* User Clarification and Quick Action Banner */}
+          {selectedFramework && (
+            <div 
+              className={`absolute top-4 ${isSidebarOpen ? 'left-4 animate-in slide-in-from-left duration-200' : 'left-16'} right-56 z-20 hidden sm:flex items-center justify-between gap-4 rounded-xl border border-slate-200/80 bg-white/90 backdrop-blur px-4 py-2 shadow-lg shadow-slate-200/30 transition-all`}
+            >
+              <div className="flex items-center gap-2 overflow-hidden">
+                <span className="text-[9px] font-black text-rose-500 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 select-none">
+                  Quick Focus
+                </span>
+                <span className="text-[11.5px] font-semibold text-slate-600 truncate">
+                  {selectedFramework.description} Add custom ideas with <span className="font-black text-indigo-600 font-mono">+</span>.
+                </span>
+              </div>
+              <button
+                onClick={addStarterNotes}
+                className="shrink-0 flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[9px] px-3 py-1.5 rounded-lg shadow-md shadow-indigo-150 border border-indigo-600 hover:-translate-y-0.5 transition-all uppercase tracking-wider"
+                title="Populate framework boxes with standard text examples for inspiration"
+              >
+                ✨ Auto-Fill Examples
+              </button>
+            </div>
           )}
 
           {/* Canvas Area */}
@@ -556,11 +690,10 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'funnel':
         return (
-          <div className="flex flex-col items-center gap-4 w-full max-w-2xl px-4 py-12">
+          <div className="flex flex-col items-center gap-4 w-full max-w-2xl px-4 py-8">
             {framework.sections.map((section, idx) => {
-              const widths = ['w-full', 'w-[85%]', 'w-[70%]', 'w-[55%]', 'w-[40%]'];
               return (
-                <div key={section.id} className={`${widths[idx]} relative flex flex-col items-center`}>
+                <div key={section.id} className="w-full relative flex flex-col items-center">
                   <SectionBox 
                     title={`${idx + 1}. ${section.name}`}
                     notes={notes.filter(n => n.sectionId === section.id)}
@@ -569,15 +702,15 @@ const FrameworkVisualizer: React.FC<{
                     onNoteUpdate={onNoteUpdate}
                     onClick={() => onSectionClick(section.name)}
                     framework={framework}
-                    className="py-10 min-h-[140px] border-b-8 border-b-indigo-500 shadow-2xl bg-white/95 rounded-3xl"
+                    className="w-full py-8 min-h-[120px] border-b-4 border-b-indigo-500 shadow bg-white rounded-xl"
                   />
                   {idx < framework.sections.length - 1 && (
                     <motion.div 
-                      animate={{ y: [0, 8, 0] }}
+                      animate={{ y: [0, 6, 0] }}
                       transition={{ duration: 2, repeat: Infinity }}
-                      className="text-slate-200 py-4"
+                      className="text-slate-200 py-2 animate-bounce"
                     >
-                      <ChevronRight className="rotate-90" size={32} />
+                      <ChevronRight className="rotate-90" size={24} />
                     </motion.div>
                   )}
                 </div>
@@ -587,46 +720,22 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'circles':
         return (
-          <div className={`relative flex items-center justify-center aspect-square mx-auto ${isMobile ? 'w-[95vw]' : 'w-[min(90vw,80vh)] max-w-2xl'}`}>
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-3 gap-6'} min-h-[50vh]`}>
             {framework.sections.map((section, idx) => {
-              const size = 100 - (idx * (isMobile ? 15 : 20));
+              const colors = ['border-t-indigo-500', 'border-t-blue-500', 'border-t-emerald-500'];
+              const layerName = idx === 0 ? '⭕ Core: ' : idx === 1 ? '⭕ Middle: ' : '⭕ Outer: ';
               return (
-                <div 
+                <SectionBox 
                   key={section.id}
-                  className="absolute rounded-full border border-indigo-100 bg-white/20 shadow-inner flex flex-col items-center pt-6 cursor-pointer hover:bg-white/30 transition-colors"
-                  style={{ 
-                    width: `${size}%`, 
-                    height: `${size}%`,
-                    zIndex: framework.sections.length - idx
-                  }}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onSectionClick(section.name);
-                  }}
-                >
-                  <span className="font-sans font-bold text-indigo-300 tracking-[0.3em] uppercase text-[9px] mb-2">{section.name}</span>
-                  <div className="flex flex-wrap justify-center gap-1.5 px-6">
-                    {notes.filter(n => n.sectionId === section.id).map(note => (
-                       <StickyNoteCard 
-                        key={note.id} 
-                        note={note} 
-                        onDelete={() => onNoteDelete(note.id)}
-                        onUpdate={(u) => onNoteUpdate(note.id, u)}
-                        sections={framework.sections}
-                        compact
-                       />
-                    ))}
-                    <button 
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onAddNote(section.id);
-                      }}
-                      className="h-8 w-8 rounded-full border border-dashed border-indigo-200 flex items-center justify-center text-indigo-300 hover:bg-indigo-50 transition-colors"
-                    >
-                      <Plus size={14} />
-                    </button>
-                  </div>
-                </div>
+                  title={`${layerName}${section.name}`}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className={`w-full h-full bg-white shadow-sm rounded-xl border-t-4 ${colors[idx % colors.length]}`}
+                />
               );
             })}
           </div>
@@ -675,85 +784,57 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'staircase':
         return (
-          <div className="flex flex-col md:flex-row w-full max-w-6xl items-end gap-3 md:gap-6 min-h-[60vh]">
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-3 gap-6'} min-h-[50vh]`}>
              {framework.sections.map((section, idx) => (
                <SectionBox 
-                key={section.id}
-                title={section.name} 
-                className="flex-1 w-full"
-                style={{ height: !isMobile ? `${(idx + 1) * 20 + 20}%` : 'auto' }}
-                notes={notes.filter(n => n.sectionId === section.id)}
-                onAddNote={() => onAddNote(section.id)}
-                onNoteDelete={onNoteDelete}
-                onNoteUpdate={onNoteUpdate}
-                onClick={() => onSectionClick(section.name)}
-                framework={framework}
-              />
+                 key={section.id}
+                 title={`Step ${idx + 1}: ${section.name}`} 
+                 className="flex-1 w-full bg-white rounded-xl border-l-4 border-l-indigo-600 shadow-sm"
+                 notes={notes.filter(n => n.sectionId === section.id)}
+                 onAddNote={() => onAddNote(section.id)}
+                 onNoteDelete={onNoteDelete}
+                 onNoteUpdate={onNoteUpdate}
+                 onClick={() => onSectionClick(section.name)}
+                 framework={framework}
+               />
              ))}
           </div>
         );
       case 'radial':
       case 'flower':
         return (
-          <div className={`relative aspect-square flex items-center justify-center ${isMobile ? 'w-[95vw]' : 'w-[min(90vw,80vh)]'}`}>
-            {/* Center Circle */}
-            <div className="z-10 h-24 w-24 md:h-36 md:w-36 rounded-full bg-indigo-600 text-white shadow-2xl flex items-center justify-center p-4 md:p-6 text-center flex-col">
-               <span className="text-[6px] md:text-[8px] font-bold uppercase tracking-widest opacity-70 mb-1">Brand</span>
-               <span className="font-bold text-[10px] md:text-xs leading-tight uppercase tracking-tight">Core Essence</span>
-            </div>
-            
-            {/* Spokes/Petals */}
-            {framework.sections.map((section, idx) => {
-              const angle = (idx / framework.sections.length) * 2 * Math.PI;
-              const radius = !isMobile ? 260 : 130;
-              const x = Math.cos(angle) * radius;
-              const y = Math.sin(angle) * radius;
-              
-              return (
-                <div 
-                  key={section.id}
-                  className="absolute"
-                  style={{ transform: `translate(${x}px, ${y}px)` }}
-                >
-                  <SectionBox 
-                    title={section.name} 
-                    className="w-24 h-32 md:w-36 md:h-40 rounded-xl"
-                    notes={notes.filter(n => n.sectionId === section.id)}
-                    onAddNote={() => onAddNote(section.id)}
-                    onNoteDelete={onNoteDelete}
-                    onNoteUpdate={onNoteUpdate}
-                    onClick={() => onSectionClick(section.name)}
-                    framework={framework}
-                    small
-                  />
-                </div>
-              );
-            })}
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'grid-cols-2 lg:grid-cols-3 gap-6'} min-h-[50vh]`}>
+            {framework.sections.map((section) => (
+              <SectionBox 
+                key={section.id}
+                title={`✿ ${section.name}`}
+                notes={notes.filter(n => n.sectionId === section.id)}
+                onAddNote={() => onAddNote(section.id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(section.name)}
+                framework={framework}
+                className="w-full bg-white border-t-4 border-t-indigo-500 rounded-xl shadow-sm"
+              />
+            ))}
           </div>
         );
       case 'pyramid':
         return (
-          <div className={`flex flex-col items-center justify-center gap-4 w-full max-w-5xl px-8 py-12 ${isMobile ? 'scale-90' : ''}`}>
-            <div className="flex flex-col items-center gap-3 w-full">
-              {[...framework.sections].reverse().map((section, idx) => {
-                const width = 100 - ((framework.sections.length - 1 - idx) * (isMobile ? 12 : 15));
-                return (
-                  <div key={section.id} className="w-full flex justify-center" style={{ maxWidth: `${width}%` }}>
-                    <SectionBox 
-                      title={section.name}
-                      notes={notes.filter(n => n.sectionId === section.id)}
-                      onAddNote={() => onAddNote(section.id)}
-                      onNoteDelete={onNoteDelete}
-                      onNoteUpdate={onNoteUpdate}
-                      onClick={() => onSectionClick(section.name)}
-                      framework={framework}
-                      className={`${idx === 0 ? 'rounded-t-[80px]' : idx === framework.sections.length - 1 ? 'rounded-none border-b-8 border-b-indigo-600' : 'rounded-none'} border-indigo-200 bg-white/95 shadow-xl py-10`}
-                      small={isMobile && idx < 2}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : `md:grid-cols-${framework.sections.length} gap-6`} min-h-[40vh]`}>
+            {[...framework.sections].reverse().map((section, idx) => (
+              <SectionBox 
+                key={section.id}
+                title={`Layer ${framework.sections.length - idx}: ${section.name}`}
+                notes={notes.filter(n => n.sectionId === section.id)}
+                onAddNote={() => onAddNote(section.id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(section.name)}
+                framework={framework}
+                className="w-full bg-white border border-slate-200 shadow-sm rounded-xl py-6 flex-1 hover:border-indigo-400"
+              />
+            ))}
           </div>
         );
       case 'bmc':
@@ -858,532 +939,173 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'map':
         return (
-          <div className={`relative border border-slate-200 rounded-2xl bg-white p-8 flex flex-col overflow-hidden ${isMobile ? 'w-[95vw] h-auto min-h-[400px]' : 'w-[90vw] h-[600px]'}`}>
-            {/* Wardley Map Axes */}
-            <div className="absolute left-12 top-8 bottom-12 w-px bg-slate-300" />
-            <div className="absolute left-12 right-8 bottom-12 h-px bg-slate-300" />
+          <div className="w-full max-w-6xl flex flex-col gap-6 min-h-[55vh]">
+            {/* Elegant Map Axes & Stage Legend */}
+            <div className={`p-4 bg-slate-50/80 backdrop-blur rounded-2xl border border-slate-100 flex ${isMobile ? 'flex-col gap-2' : 'items-center justify-between'} text-[11px] font-bold text-slate-500 uppercase tracking-wider shadow-sm`}>
+              <span className="flex items-center gap-1.5 text-indigo-600">
+                <span className="h-2 w-2 rounded-full bg-indigo-500 animate-pulse" />
+                Value Chain Vertical Axis: High Visibility (Top) ➜ Invisible Componentry (Bottom)
+              </span>
+              <span className="flex items-center gap-1.5 text-emerald-600">
+                Evolution Horizontal Axis: Genesis ➜ Custom ➜ Product ➜ Commodity
+              </span>
+            </div>
             
-            <div className="absolute left-4 top-1/2 -rotate-90 text-[10px] font-bold text-slate-400">VALUE CHAIN</div>
-            <div className="absolute left-1/2 bottom-4 -translate-x-1/2 text-[10px] font-bold text-slate-400">EVOLUTION</div>
-            
-            <div className="absolute inset-x-12 bottom-12 top-8 flex text-[9px] font-bold uppercase tracking-widest text-slate-200 pointer-events-none">
-              <div className="flex-1 border-r border-slate-100 flex items-end justify-center pb-2">Genesis</div>
-              <div className="flex-1 border-r border-slate-100 flex items-end justify-center pb-2">Custom</div>
-              <div className="flex-1 border-r border-slate-100 flex items-end justify-center pb-2">Product</div>
-              <div className="flex-1 flex items-end justify-center pb-2">Utility</div>
-            </div>
-
-            <div className="flex-1 relative">
-                {framework.sections.map((section, idx) => (
-                  <div key={section.id} 
-                    className="absolute p-3 border border-dashed border-slate-200 rounded-lg hover:border-indigo-400 bg-slate-50/50 transition-all cursor-pointer group"
-                    style={{ 
-                        left: `${10 + (idx * 30)}%`, 
-                        top: `${10 + (idx * 25)}%`,
-                        width: '240px'
-                    }}
-                    onClick={() => onSectionClick(section.name)}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{section.name}</span>
-                        <div className="h-5 w-5 rounded-full bg-indigo-50 flex items-center justify-center text-indigo-600 hover:bg-indigo-600 hover:text-white transition-colors"
-                             onClick={(e) => { e.stopPropagation(); onAddNote(section.id); }}>
-                          <Plus size={12} />
-                        </div>
-                    </div>
-                    <div className="space-y-2">
-                        {notes.filter(n => n.sectionId === section.id).map(note => (
-                            <StickyNoteCard 
-                                key={note.id} 
-                                note={note} 
-                                onDelete={() => onNoteDelete(note.id)}
-                                onUpdate={(u) => onNoteUpdate(note.id, u)}
-                                sections={framework.sections}
-                                compact
-                            />
-                        ))}
-                    </div>
-                  </div>
-                ))}
-            </div>
-          </div>
-        );
-      case 'stage-gate':
-        return (
-          <div className={`flex items-center gap-4 ${isMobile ? 'flex-col min-h-[80vh] w-full overflow-y-auto' : 'h-[60vh] w-[90vw] overflow-x-auto px-8'}`}>
-            {framework.sections.map((section, idx) => (
-              <React.Fragment key={section.id}>
-                <div className="flex flex-col items-center">
-                  <div className="text-[10px] font-bold text-slate-400 uppercase mb-2">Stage {idx + 1}</div>
-                  <SectionBox 
-                    title={section.name} 
-                    className={`${isMobile ? 'w-full' : 'w-56 h-64'} border-2 border-indigo-100`}
-                    notes={notes.filter(n => n.sectionId === section.id)}
-                    onAddNote={() => onAddNote(section.id)}
-                    onNoteDelete={onNoteDelete}
-                    onNoteUpdate={onNoteUpdate}
-                    onClick={() => onSectionClick(section.name)}
-                    framework={framework}
-                  />
-                </div>
-                {idx < framework.sections.length - 1 && (
-                  <div className={`flex flex-col items-center ${isMobile ? 'py-4' : 'pt-8'}`}>
-                    <div className="text-[9px] font-black text-indigo-500 uppercase mb-2">Gate {idx + 1}</div>
-                    <div className="w-16 h-16 bg-white border-2 border-indigo-500 rotate-45 flex items-center justify-center shadow-lg shadow-indigo-100">
-                      <div className="-rotate-45 font-black text-[10px] text-indigo-600">GO?</div>
-                    </div>
-                  </div>
-                )}
-              </React.Fragment>
-            ))}
-          </div>
-        );
-      case 'diamond':
-        return (
-          <div className={`relative flex items-center justify-center ${isMobile ? 'h-auto w-full flex-col gap-4' : 'h-[80vh] w-[80vh]'}`}>
-            {!isMobile && (
-              <svg className="absolute inset-0 w-full h-full pointer-events-none stroke-slate-200" strokeWidth="2">
-                <line x1="50%" y1="15%" x2="50%" y2="85%" />
-                <line x1="15%" y1="50%" x2="85%" y2="50%" />
-                <line x1="15%" y1="50%" x2="50%" y2="15%" />
-                <line x1="50%" y1="15%" x2="85%" y2="50%" />
-                <line x1="85%" y1="50%" x2="50%" y2="85%" />
-                <line x1="50%" y1="85%" x2="15%" y2="50%" />
-              </svg>
-            )}
-            
-            <div className={`${isMobile ? 'static' : 'absolute inset-0'} flex flex-col items-center justify-center`}>
-              <div className="z-10 bg-white border-2 border-indigo-600 p-4 shadow-xl rounded-lg max-w-[150px] text-center">
-                <span className="text-[8px] font-bold uppercase text-slate-400 block mb-1">Central Change</span>
-                <p className="text-[10px] font-black leading-tight text-slate-800">Identify ripple effects across the diamond nodes.</p>
-              </div>
-            </div>
-
-            <div className={`${isMobile ? 'static w-full' : 'absolute top-[5%] left-1/2 -translate-x-1/2 w-48 h-56'}`}>
-                <SectionBox 
-                  title={framework.sections[0].name}
-                  notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
-                  onAddNote={() => onAddNote(framework.sections[0].id)}
-                  onNoteDelete={onNoteDelete}
-                  onNoteUpdate={onNoteUpdate}
-                  onClick={() => onSectionClick(framework.sections[0].name)}
-                  framework={framework}
-                  className={`${isMobile ? '' : 'h-full'} border-t-4 border-t-indigo-500`}
-                />
-            </div>
-            <div className={`${isMobile ? 'static w-full' : 'absolute bottom-[5%] left-1/2 -translate-x-1/2 w-48 h-56'}`}>
-                <SectionBox 
-                  title={framework.sections[2].name}
-                  notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
-                  onAddNote={() => onAddNote(framework.sections[2].id)}
-                  onNoteDelete={onNoteDelete}
-                  onNoteUpdate={onNoteUpdate}
-                  onClick={() => onSectionClick(framework.sections[2].name)}
-                  framework={framework}
-                  className={`${isMobile ? '' : 'h-full'} border-b-4 border-b-indigo-500`}
-                />
-            </div>
-            <div className={`${isMobile ? 'static w-full' : 'absolute left-[5%] top-1/2 -translate-y-1/2 w-48 h-56'}`}>
-                <SectionBox 
-                  title={framework.sections[1].name}
-                  notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
-                  onAddNote={() => onAddNote(framework.sections[1].id)}
-                  onNoteDelete={onNoteDelete}
-                  onNoteUpdate={onNoteUpdate}
-                  onClick={() => onSectionClick(framework.sections[1].name)}
-                  framework={framework}
-                  className={`${isMobile ? '' : 'h-full'} border-l-4 border-l-indigo-500`}
-                />
-            </div>
-            <div className={`${isMobile ? 'static w-full' : 'absolute right-[5%] top-1/2 -translate-y-1/2 w-48 h-56'}`}>
-                <SectionBox 
-                  title={framework.sections[3].name}
-                  notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
-                  onAddNote={() => onAddNote(framework.sections[3].id)}
-                  onNoteDelete={onNoteDelete}
-                  onNoteUpdate={onNoteUpdate}
-                  onClick={() => onSectionClick(framework.sections[3].name)}
-                  framework={framework}
-                  className={`${isMobile ? '' : 'h-full'} border-r-4 border-r-indigo-500`}
-                />
-            </div>
-          </div>
-        );
-      case 'double-diamond':
-        return (
-          <div className={`relative flex items-center justify-center ${isMobile ? 'flex-col w-full gap-8' : 'w-[90vw] h-[600px] scale-90 lg:scale-100'}`}>
-            {/* The Two Diamonds Background */}
-            {!isMobile && (
-              <div className="absolute inset-x-8 inset-y-12 flex gap-8 pointer-events-none opacity-20">
-                <div className="flex-1 rotate-45 border-4 border-indigo-500 bg-indigo-50/30" />
-                <div className="flex-1 rotate-45 border-4 border-indigo-500 bg-indigo-50/30" />
-              </div>
-            )}
-
-            <div className="flex-1 w-full flex flex-col gap-8 z-10">
-               <div className={`flex flex-col ${isMobile ? 'gap-8' : 'md:flex-row gap-8'}`}>
-                  <div className="flex-1 flex flex-col gap-4">
-                      <div className="text-center font-black text-indigo-600 text-[10px] uppercase tracking-widest bg-white border border-indigo-100 py-1 rounded shadow-sm">Problem Space</div>
-                      <div className={`flex ${isMobile ? 'flex-col' : 'gap-4'}`}>
-                         <SectionBox 
-                            title={framework.sections[0].name}
-                            notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
-                            onAddNote={() => onAddNote(framework.sections[0].id)}
-                            onNoteDelete={onNoteDelete}
-                            onNoteUpdate={onNoteUpdate}
-                            onClick={() => onSectionClick(framework.sections[0].name)}
-                            framework={framework}
-                            className="flex-1"
-                         />
-                         <SectionBox 
-                            title={framework.sections[1].name}
-                            notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
-                            onAddNote={() => onAddNote(framework.sections[1].id)}
-                            onNoteDelete={onNoteDelete}
-                            onNoteUpdate={onNoteUpdate}
-                            onClick={() => onSectionClick(framework.sections[1].name)}
-                            framework={framework}
-                            className="flex-1 border-r-4 border-r-indigo-500"
-                         />
-                      </div>
-                  </div>
-
-                  <div className="flex-1 flex flex-col gap-4">
-                      <div className="text-center font-black text-indigo-600 text-[10px] uppercase tracking-widest bg-white border border-indigo-100 py-1 rounded shadow-sm">Solution Space</div>
-                      <div className={`flex ${isMobile ? 'flex-col' : 'gap-4'}`}>
-                         <SectionBox 
-                            title={framework.sections[2].name}
-                            notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
-                            onAddNote={() => onAddNote(framework.sections[2].id)}
-                            onNoteDelete={onNoteDelete}
-                            onNoteUpdate={onNoteUpdate}
-                            onClick={() => onSectionClick(framework.sections[2].name)}
-                            framework={framework}
-                            className="flex-1 border-l-4 border-l-indigo-500"
-                         />
-                         <SectionBox 
-                            title={framework.sections[3].name}
-                            notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
-                            onAddNote={() => onAddNote(framework.sections[3].id)}
-                            onNoteDelete={onNoteDelete}
-                            onNoteUpdate={onNoteUpdate}
-                            onClick={() => onSectionClick(framework.sections[3].name)}
-                            framework={framework}
-                            className="flex-1"
-                         />
-                      </div>
-                  </div>
-               </div>
-            </div>
-          </div>
-        );
-      case 'cycle':
-        return (
-          <div className={`relative flex items-center justify-center ${isMobile ? 'w-[95vw] h-[95vw]' : 'h-[80vh] w-[80vh]'}`}>
-            {framework.sections.map((section, idx) => {
-              const angle = (idx * 360) / framework.sections.length;
-              const radian = (angle * Math.PI) / 180;
-              const radius = isMobile ? 120 : 250;
-              const x = Math.cos(radian) * radius;
-              const y = Math.sin(radian) * radius;
-
-              // Calculate arrow position (between this one and next)
-              const nextAngle = ((idx + 1) * 360) / framework.sections.length;
-              const midAngle = (angle + nextAngle) / 2;
-              const midRadian = (midAngle * Math.PI) / 180;
-              const arrowX = Math.cos(midRadian) * radius;
-              const arrowY = Math.sin(midRadian) * radius;
-
-              return (
-                <React.Fragment key={section.id}>
-                  <div
-                    className="absolute"
-                    style={{ transform: `translate(${x}px, ${y}px)` }}
-                  >
+            <div className={`grid w-full grid-cols-1 ${isMobile ? 'gap-4' : 'md:grid-cols-3 gap-6'}`}>
+              {framework.sections.map((section, idx) => {
+                const colors = ['border-t-indigo-500', 'border-t-purple-500', 'border-t-emerald-500'];
+                const icons = ['🎯', '⚙️', '🌊'];
+                const subLabels = [
+                  'High Visibility – Customer demand, anchor requirements & entry points',
+                  'Intermediate Chain – Key dependency pipelines, proprietary assets & value adders',
+                  'Base Foundation – Standard protocols, utility power, packages & infrastructure'
+                ];
+                return (
+                  <div key={section.id} className="flex flex-col h-full bg-white/50 p-2 rounded-2xl border border-slate-100/50 shadow-sm hover:shadow-md transition-all">
                     <SectionBox 
-                      title={section.name} 
+                      title={`${icons[idx % icons.length]} ${section.name}`}
                       notes={notes.filter(n => n.sectionId === section.id)}
                       onAddNote={() => onAddNote(section.id)}
                       onNoteDelete={onNoteDelete}
                       onNoteUpdate={onNoteUpdate}
                       onClick={() => onSectionClick(section.name)}
                       framework={framework}
-                      className={`${isMobile ? 'w-24 h-28' : 'w-40 h-44'} rounded-2xl`}
-                      small={isMobile}
+                      className={`w-full bg-white border-t-4 ${colors[idx % colors.length]} rounded-xl shadow-sm`}
                     />
+                    <span className="text-[10px] text-slate-400 mt-2 px-2.5 leading-relaxed italic">{subLabels[idx]}</span>
                   </div>
-                  {!isMobile && (
-                    <motion.div
-                      initial={{ opacity: 0 }}
-                      animate={{ opacity: 1 }}
-                      className="absolute text-slate-300"
-                      style={{ 
-                        transform: `translate(${arrowX}px, ${arrowY}px) rotate(${midAngle + 90}deg)` 
-                      }}
-                    >
-                      <ArrowRight size={24} />
-                    </motion.div>
-                  )}
-                </React.Fragment>
-              );
-            })}
-            <div className={`${isMobile ? 'w-20 h-20 text-xs' : 'w-32 h-32 text-xl'} rounded-full border-4 border-dashed border-slate-100 flex items-center justify-center text-slate-300 font-black uppercase tracking-tighter`}>
-                CYCLE
+                );
+              })}
             </div>
           </div>
         );
+      case 'stage-gate':
+        return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-3 gap-6'} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => (
+              <SectionBox 
+                key={section.id}
+                title={`Stage ${idx + 1}: ${section.name}`} 
+                className="w-full h-full border-t-4 border-t-indigo-500 rounded-xl bg-white shadow"
+                notes={notes.filter(n => n.sectionId === section.id)}
+                onAddNote={() => onAddNote(section.id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(section.name)}
+                framework={framework}
+              />
+            ))}
+          </div>
+        );
+      case 'diamond':
+        return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-4 gap-4'} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => {
+              const borders = ['border-t-indigo-500', 'border-l-indigo-500', 'border-b-indigo-500', 'border-r-indigo-500'];
+              return (
+                <SectionBox 
+                  key={section.id}
+                  title={section.name}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className={`w-full rounded-xl bg-white shadow-sm border-2 ${borders[idx % borders.length]}`}
+                />
+              );
+            })}
+          </div>
+        );
+      case 'double-diamond':
+        return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-4' : 'md:grid-cols-4 gap-6'} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => {
+              const space = idx < 2 ? '💎 Problem Space' : '💎 Solution Space';
+              return (
+                <SectionBox 
+                  key={section.id}
+                  title={`${space}: ${section.name}`}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className={`w-full rounded-xl bg-white shadow-sm border-t-4 ${idx < 2 ? 'border-t-indigo-600' : 'border-t-emerald-600'}`}
+                />
+              );
+            })}
+          </div>
+        );
+      case 'cycle':
+        return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-4 gap-6'} min-h-[40vh]`}>
+            {framework.sections.map((section, idx) => (
+              <SectionBox 
+                key={section.id}
+                title={`⟳ Step ${idx + 1}: ${section.name}`} 
+                notes={notes.filter(n => n.sectionId === section.id)}
+                onAddNote={() => onAddNote(section.id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(section.name)}
+                framework={framework}
+                className="w-full h-full rounded-xl border border-slate-200 bg-white shadow"
+              />
+            ))}
+          </div>
+        );
       case 'hype-cycle':
-        return (
-           <div className={`relative border-l-2 border-b-2 border-slate-200 p-8 ${isMobile ? 'w-full h-auto min-h-[400px]' : 'w-[90vw] h-[600px]'}`}>
-              <div className="absolute left-4 top-1/2 -rotate-90 text-[10px] font-black text-slate-400 uppercase tracking-widest">Expectations</div>
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Time</div>
-              
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 600">
-                <motion.path 
-                  d="M 50 550 Q 150 550 250 100 Q 350 500 450 500 Q 600 500 800 300 Q 900 250 950 250"
-                  fill="none"
-                  stroke="#6366f1"
-                  strokeWidth="4"
-                  strokeDasharray="8 4"
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 3 }}
-                />
-              </svg>
-
-              <div className="absolute inset-x-12 inset-y-8 flex gap-4">
-                 {framework.sections.map((section, idx) => {
-                    const positions = [
-                      { left: '15%', top: '70%' },
-                      { left: '25%', top: '10%' },
-                      { left: '45%', top: '80%' },
-                      { left: '65%', top: '50%' },
-                      { left: '85%', top: '35%' }
-                    ];
-                    return (
-                      <div 
-                        key={section.id} 
-                        className="absolute w-48 transition-all hover:z-50"
-                        style={positions[idx] || {}}
-                      >
-                         <SectionBox 
-                            title={section.name}
-                            notes={notes.filter(n => n.sectionId === section.id)}
-                            onAddNote={() => onAddNote(section.id)}
-                            onNoteDelete={onNoteDelete}
-                            onNoteUpdate={onNoteUpdate}
-                            onClick={() => onSectionClick(section.name)}
-                            framework={framework}
-                            small
-                            className="bg-white/90 backdrop-blur shadow-xl border-indigo-50"
-                         />
-                      </div>
-                    );
-                 })}
-              </div>
-           </div>
-        );
       case 's-curve':
-        return (
-           <div className={`relative border-l-2 border-b-2 border-slate-200 p-8 ${isMobile ? 'w-full h-auto min-h-[400px]' : 'w-[90vw] h-[600px]'}`}>
-              <div className="absolute left-4 top-1/2 -rotate-90 text-[10px] font-black text-slate-400 uppercase tracking-widest">Performance</div>
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Time / Effort</div>
-              
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 600">
-                <motion.path 
-                  d="M 50 550 Q 300 550 500 300 Q 700 50 950 50"
-                  fill="none"
-                  stroke="#10b981"
-                  strokeWidth="4"
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 3 }}
-                />
-              </svg>
-
-              <div className="absolute inset-x-12 inset-y-8 flex gap-4">
-                 {framework.sections.map((section, idx) => {
-                    const positions = [
-                      { left: '5%', top: '75%' },
-                      { left: '40%', top: '40%' },
-                      { left: '75%', top: '10%' }
-                    ];
-                    return (
-                      <div 
-                        key={section.id} 
-                        className="absolute w-56 transition-all hover:z-50"
-                        style={positions[idx] || {}}
-                      >
-                         <SectionBox 
-                            title={section.name}
-                            notes={notes.filter(n => n.sectionId === section.id)}
-                            onAddNote={() => onAddNote(section.id)}
-                            onNoteDelete={onNoteDelete}
-                            onNoteUpdate={onNoteUpdate}
-                            onClick={() => onSectionClick(section.name)}
-                            framework={framework}
-                            className="bg-white/90 backdrop-blur shadow-xl border-emerald-50"
-                         />
-                      </div>
-                    );
-                 })}
-              </div>
-           </div>
-        );
       case 'bell-curve':
-        return (
-           <div className={`relative border-b-2 border-slate-200 p-8 ${isMobile ? 'w-full h-auto min-h-[400px]' : 'w-[90vw] h-[600px]'}`}>
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Time / Adopters</div>
-              
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 600">
-                <motion.path 
-                  d="M 50 550 Q 250 550 350 300 Q 500 0 650 300 Q 750 550 950 550"
-                  fill="none"
-                  stroke="#6366f1"
-                  strokeWidth="4"
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 3 }}
-                />
-                {/* Vertical Area Dividers */}
-                <line x1="150" y1="550" x2="150" y2="400" stroke="#e2e8f0" strokeDasharray="4" />
-                <line x1="300" y1="550" x2="300" y2="200" stroke="#e2e8f0" strokeDasharray="4" />
-                <line x1="500" y1="550" x2="500" y2="50" stroke="#e2e8f0" strokeDasharray="4" />
-                <line x1="700" y1="550" x2="700" y2="200" stroke="#e2e8f0" strokeDasharray="4" />
-                <line x1="850" y1="550" x2="850" y2="400" stroke="#e2e8f0" strokeDasharray="4" />
-              </svg>
-
-              <div className="absolute inset-x-12 inset-y-8 flex gap-4">
-                 {framework.sections.map((section, idx) => {
-                    const positions = [
-                      { left: '2%', top: '65%' },
-                      { left: '17%', top: '35%' },
-                      { left: '35%', top: '15%' },
-                      { left: '55%', top: '35%' },
-                      { left: '80%', top: '65%' }
-                    ];
-                    return (
-                      <div 
-                        key={section.id} 
-                        className="absolute w-40 transition-all hover:z-50"
-                        style={positions[idx] || {}}
-                      >
-                         <SectionBox 
-                            title={section.name}
-                            notes={notes.filter(n => n.sectionId === section.id)}
-                            onAddNote={() => onAddNote(section.id)}
-                            onNoteDelete={onNoteDelete}
-                            onNoteUpdate={onNoteUpdate}
-                            onClick={() => onSectionClick(section.name)}
-                            framework={framework}
-                            small
-                            className="bg-white/90 backdrop-blur shadow-xl border-indigo-50"
-                         />
-                      </div>
-                    );
-                 })}
-              </div>
-           </div>
-        );
       case 'satir':
         return (
-           <div className={`relative border-l-2 border-b-2 border-slate-200 p-8 ${isMobile ? 'w-full h-auto min-h-[400px]' : 'w-[90vw] h-[600px]'}`}>
-              <div className="absolute left-4 top-1/2 -rotate-90 text-[10px] font-black text-slate-400 uppercase tracking-widest">Performance</div>
-              <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-[10px] font-black text-slate-400 uppercase tracking-widest">Time</div>
-              
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 600">
-                <motion.path 
-                  d="M 50 200 L 250 200 Q 300 200 350 450 Q 500 600 650 300 Q 750 100 950 100"
-                  fill="none"
-                  stroke="#ef4444"
-                  strokeWidth="4"
-                  initial={{ pathLength: 0 }}
-                  animate={{ pathLength: 1 }}
-                  transition={{ duration: 3 }}
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : `md:grid-cols-${framework.sections.length} gap-4`} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => {
+              const colors = ['border-t-indigo-500', 'border-t-blue-500', 'border-t-emerald-500', 'border-t-amber-500', 'border-t-rose-500'];
+              return (
+                <SectionBox 
+                  key={section.id} 
+                  title={`[Phase ${idx + 1}] ${section.name}`}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className={`w-full bg-white border-t-4 ${colors[idx % colors.length]} shadow-sm rounded-xl`}
                 />
-              </svg>
-
-              <div className="absolute inset-x-12 inset-y-8 flex gap-4">
-                 {framework.sections.map((section, idx) => {
-                    const positions = [
-                      { left: '5%', top: '15%' },
-                      { left: '20%', top: '35%' },
-                      { left: '40%', top: '75%' },
-                      { left: '60%', top: '45%' },
-                      { left: '80%', top: '5%' }
-                    ];
-                    return (
-                      <div 
-                        key={section.id} 
-                        className="absolute w-44 transition-all hover:z-50"
-                        style={positions[idx] || {}}
-                      >
-                         <SectionBox 
-                            title={section.name}
-                            notes={notes.filter(n => n.sectionId === section.id)}
-                            onAddNote={() => onAddNote(section.id)}
-                            onNoteDelete={onNoteDelete}
-                            onNoteUpdate={onNoteUpdate}
-                            onClick={() => onSectionClick(section.name)}
-                            framework={framework}
-                            small
-                            className="bg-white/90 backdrop-blur shadow-xl border-rose-50"
-                         />
-                      </div>
-                    );
-                 })}
-              </div>
-           </div>
+              );
+            })}
+          </div>
         );
       case 'spiral':
         return (
-          <div className={`relative flex items-center justify-center ${isMobile ? 'w-[95vw] h-auto' : 'w-[80vh] h-[80vh]'}`}>
-            {!isMobile && (
-              <svg className="absolute inset-0 w-full h-full pointer-events-none" viewBox="0 0 1000 1000">
-                <motion.path 
-                    d="M 500 500 C 500 400, 600 400, 600 500 C 600 650, 400 650, 400 500 C 400 300, 700 300, 700 500 C 700 750, 300 750, 300 500 C 300 200, 800 200, 800 500 C 800 850, 200 850, 200 500"
-                    fill="none"
-                    stroke="#cbd5e1"
-                    strokeWidth="2"
-                    strokeDasharray="8 4"
-                    initial={{ pathLength: 0 }}
-                    animate={{ pathLength: 1 }}
-                    transition={{ duration: 4 }}
-                />
-                <line x1="500" y1="0" x2="500" y2="1000" stroke="#f1f5f9" strokeWidth="1" />
-                <line x1="0" y1="500" x2="1000" y2="500" stroke="#f1f5f9" strokeWidth="1" />
-              </svg>
-            )}
-            
-            <div className={`inset-0 w-full ${isMobile ? 'flex flex-col gap-4' : 'absolute grid grid-cols-2 grid-rows-2'}`}>
-               {framework.sections.map((section, idx) => {
-                  const colors = ['border-blue-400', 'border-rose-400', 'border-emerald-400', 'border-amber-400'];
-                  return (
-                    <div 
-                      key={section.id} 
-                      className={`${isMobile ? 'p-2' : 'p-12'} flex flex-col items-center justify-center relative group`}
-                    >
-                       {!isMobile && <div className="absolute top-4 left-4 text-[10px] font-black text-slate-300 uppercase tracking-widest">{idx + 1}</div>}
-                       <SectionBox 
-                          title={section.name}
-                          notes={notes.filter(n => n.sectionId === section.id)}
-                          onAddNote={() => onAddNote(section.id)}
-                          onNoteDelete={onNoteDelete}
-                          onNoteUpdate={onNoteUpdate}
-                          onClick={() => onSectionClick(section.name)}
-                          framework={framework}
-                          className={`w-full max-w-sm ${colors[idx % colors.length]}`}
-                       />
-                    </div>
-                  );
-               })}
-            </div>
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-2 lg:grid-cols-4 gap-6'} min-h-[40vh]`}>
+             {framework.sections.map((section, idx) => {
+                const colors = ['border-blue-400', 'border-rose-400', 'border-emerald-400', 'border-amber-400'];
+                return (
+                  <SectionBox 
+                     key={section.id} 
+                     title={`🌀 ${section.name}`}
+                     notes={notes.filter(n => n.sectionId === section.id)}
+                     onAddNote={() => onAddNote(section.id)}
+                     onNoteDelete={onNoteDelete}
+                     onNoteUpdate={onNoteUpdate}
+                     onClick={() => onSectionClick(section.name)}
+                     framework={framework}
+                     className={`w-full h-full border-t-4 ${colors[idx % colors.length]} rounded-xl`}
+                  />
+                );
+             })}
           </div>
         );
       case 't-chart':
         return (
           <div className={`flex flex-col md:flex-row h-full w-full max-w-6xl gap-8 ${isMobile ? 'p-2' : ''}`}>
-            {framework.sections.map((section, idx) => (
+            {framework.sections.map((section) => (
               <div key={section.id} className="flex-1 flex flex-col items-center">
                 <div className="w-full text-center mb-4 pb-2 border-b-4 border-indigo-500">
                   <h3 className="text-sm font-black uppercase tracking-widest text-slate-900">{section.name}</h3>
@@ -1413,34 +1135,25 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'comparison':
         return (
-          <div className={`flex items-center justify-center gap-8 ${isMobile ? 'flex-col w-full' : 'w-[95vw]'}`}>
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-3 gap-6'} min-h-[45vh]`}>
             {framework.sections.map((section, idx) => (
-              <React.Fragment key={section.id}>
-                <div className={`${isMobile ? 'w-full' : 'flex-1 max-w-md'}`}>
-                   <SectionBox 
-                      title={section.name}
-                      notes={notes.filter(n => n.sectionId === section.id)}
-                      onAddNote={() => onAddNote(section.id)}
-                      onNoteDelete={onNoteDelete}
-                      onNoteUpdate={onNoteUpdate}
-                      onClick={() => onSectionClick(section.name)}
-                      framework={framework}
-                      className={idx === 2 ? 'border-indigo-500 bg-indigo-50/20' : ''}
-                   />
-                </div>
-                {!isMobile && (
-                  <>
-                    {idx === 0 && <div className="text-2xl font-black text-slate-300">+</div>}
-                    {idx === 1 && <div className="text-2xl font-black text-slate-300">=</div>}
-                  </>
-                )}
-              </React.Fragment>
+               <SectionBox 
+                  key={section.id}
+                  title={section.name}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className={`w-full rounded-xl shadow-sm border-2 ${idx === 2 ? 'border-indigo-500 bg-indigo-50/20' : ''}`}
+               />
             ))}
           </div>
         );
       case 'kanban':
         return (
-          <div className={`flex gap-6 ${isMobile ? 'flex-col min-h-[80vh] w-full overflow-y-auto' : 'h-[70vh] w-[95vw] px-8 overflow-x-auto'}`}>
+          <div className={`flex gap-6 w-full ${isMobile ? 'flex-col min-h-[80vh] overflow-y-auto' : 'h-[70vh] max-w-6xl px-8 overflow-x-auto'}`}>
             {framework.sections.map((section) => (
               <div key={section.id} className={`${isMobile ? 'w-full' : 'flex-1 min-w-[300px]'} flex flex-col bg-slate-100/50 rounded-xl p-4 border border-slate-200`}>
                  <div className="flex items-center justify-between mb-4 px-2">
@@ -1472,7 +1185,7 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'value-chain':
         return (
-          <div className={`relative flex flex-col gap-4 ${isMobile ? 'w-full' : 'w-[95vw] max-w-6xl'}`}>
+          <div className="relative flex flex-col gap-4 w-full max-w-6xl">
              {/* Support Activities */}
              <div className="flex flex-col gap-2">
                 {framework.sections.slice(5).map(section => (
@@ -1515,7 +1228,7 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'gauge':
         return (
-          <div className="relative w-[80vw] h-[500px] flex flex-col items-center justify-center p-8">
+          <div className="relative w-full max-w-4xl h-[500px] flex flex-col items-center justify-center p-8">
             <svg className="w-[500px] h-[300px]" viewBox="0 0 500 300">
                {/* Gauge Background */}
                <path 
@@ -1582,324 +1295,122 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'hoq':
         return (
-          <div className={`relative flex flex-col items-center justify-center p-8 ${isMobile ? 'w-full scale-[0.6] origin-top' : 'w-full max-w-6xl min-h-[800px]'}`}>
-            <div className="relative flex flex-col items-center w-full">
-              {/* Roof */}
-              <div className="w-80 h-40 bg-slate-50 border-2 border-slate-200 relative [clip-path:polygon(50%_0%,100%_100%,0%_100%)] mb-[-2px] flex items-end justify-center pb-4">
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-2 lg:grid-cols-4 gap-6'} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => {
+              const borderStyles = ['border-t-indigo-500', 'border-t-emerald-500', 'border-t-amber-500', 'border-t-rose-500'];
+              return (
                 <SectionBox 
-                  title={framework.sections[3].name}
-                  notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
-                  onAddNote={() => onAddNote(framework.sections[3].id)}
-                  onNoteDelete={onNoteDelete}
-                  onNoteUpdate={onNoteUpdate}
-                  onClick={() => onSectionClick(framework.sections[3].name)}
-                  framework={framework}
-                  small
-                  className="w-56 bg-white/50 border-none shadow-none"
+                   key={section.id}
+                   title={section.name}
+                   notes={notes.filter(n => n.sectionId === section.id)}
+                   onAddNote={() => onAddNote(section.id)}
+                   onNoteDelete={onNoteDelete}
+                   onNoteUpdate={onNoteUpdate}
+                   onClick={() => onSectionClick(section.name)}
+                   framework={framework}
+                   className={`w-full bg-white shadow-sm border-t-4 ${borderStyles[idx % borderStyles.length]} rounded-xl`}
                 />
-              </div>
-              {/* Body */}
-              <div className={`flex items-stretch ${isMobile ? 'flex-col gap-6' : 'gap-4'} w-full`}>
-                {/* Left Panel */}
-                <div className={`${isMobile ? 'w-full' : 'flex-1'} flex flex-col gap-4 justify-center`}>
-                   <SectionBox 
-                      title={framework.sections[0].name}
-                      notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
-                      onAddNote={() => onAddNote(framework.sections[0].id)}
-                      onNoteDelete={onNoteDelete}
-                      onNoteUpdate={onNoteUpdate}
-                      onClick={() => onSectionClick(framework.sections[0].name)}
-                      framework={framework}
-                      className="border-r-8 border-r-indigo-500 h-full py-12"
-                   />
-                </div>
-                {/* Center Grid */}
-                <div className={`${isMobile ? 'w-full' : 'flex-[2]'} min-h-[400px] bg-slate-50 border-2 border-slate-200 rounded-xl flex items-center justify-center p-8 shadow-inner`}>
-                   <SectionBox 
-                      title={framework.sections[2].name}
-                      notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
-                      onAddNote={() => onAddNote(framework.sections[2].id)}
-                      onNoteDelete={onNoteDelete}
-                      onNoteUpdate={onNoteUpdate}
-                      onClick={() => onSectionClick(framework.sections[2].name)}
-                      framework={framework}
-                      className="w-full h-full border-none shadow-none bg-transparent"
-                   />
-                </div>
-                {/* Right Panel */}
-                <div className={`${isMobile ? 'w-full' : 'flex-1'} flex flex-col gap-4`}>
-                   <SectionBox 
-                      title={framework.sections[1].name}
-                      notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
-                      onAddNote={() => onAddNote(framework.sections[1].id)}
-                      onNoteDelete={onNoteDelete}
-                      onNoteUpdate={onNoteUpdate}
-                      onClick={() => onSectionClick(framework.sections[1].name)}
-                      framework={framework}
-                      className="border-t-4 border-t-emerald-500"
-                   />
-                </div>
-              </div>
-            </div>
+              );
+            })}
           </div>
         );
       case 'ladder':
         return (
-          <div className="flex flex-col items-center gap-4 w-[90vw] py-12">
+          <div className="grid w-full max-w-3xl grid-cols-1 gap-4 min-h-[40vh]">
             {[...framework.sections].reverse().map((section, idx) => (
-              <div key={section.id} className="relative flex items-center group">
-                {/* Rungs */}
-                {idx > 0 && (
-                  <div className="absolute -top-4 left-1/2 -translate-x-1/2 w-4 h-4 border-l-2 border-r-2 border-slate-300" />
-                )}
-                <div className="w-96 flex items-center gap-4">
-                  <div className="w-8 h-8 rounded-full bg-indigo-600 text-white flex items-center justify-center font-bold text-xs">
-                    {framework.sections.length - idx}
-                  </div>
-                  <SectionBox 
-                    title={section.name}
-                    notes={notes.filter(n => n.sectionId === section.id)}
-                    onAddNote={() => onAddNote(section.id)}
-                    onNoteDelete={onNoteDelete}
-                    onNoteUpdate={onNoteUpdate}
-                    onClick={() => onSectionClick(section.name)}
-                    framework={framework}
-                    className="flex-1 border-indigo-100 shadow-sm"
-                  />
-                </div>
-              </div>
+              <SectionBox 
+                key={section.id}
+                title={`Level ${framework.sections.length - idx}: ${section.name}`}
+                notes={notes.filter(n => n.sectionId === section.id)}
+                onAddNote={() => onAddNote(section.id)}
+                onNoteDelete={onNoteDelete}
+                onNoteUpdate={onNoteUpdate}
+                onClick={() => onSectionClick(section.name)}
+                framework={framework}
+                className="w-full bg-white shadow-sm border-l-4 border-l-indigo-600 rounded-xl"
+              />
             ))}
           </div>
         );
       case 'iceberg':
         return (
-          <div className="relative w-full max-w-5xl h-[900px] flex items-center justify-center py-20 px-4">
-            {/* Water Line */}
-            <div className="absolute top-[25%] left-0 w-full h-1.5 bg-blue-400 opacity-20 blur-[1px] z-10" />
-            <div className="absolute top-[25%] left-8 text-[12px] font-black text-blue-500/40 uppercase tracking-widest -translate-y-6">Visible Layer</div>
-            <div className="absolute top-[25%] left-8 text-[12px] font-black text-indigo-500/40 uppercase tracking-widest translate-y-2">Underlying Structure</div>
-            
-            <div className="relative w-full h-full flex flex-col items-center">
-               <svg className="absolute inset-0 w-full h-full drop-shadow-2xl" viewBox="0 0 600 800">
-                  <path 
-                    d="M 300 20 L 580 780 L 20 780 Z" 
-                    fill="#f8fafc" 
-                    stroke="#e2e8f0" 
-                    strokeWidth="4"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                  />
-               </svg>
-               
-               <div className="relative z-20 w-full h-full flex flex-col gap-12 p-16">
-                  {framework.sections.map((section, idx) => {
-                     const widths = ['w-[30%]', 'w-[45%]', 'w-[65%]', 'w-[85%]'];
-                     return (
-                       <div 
-                         key={section.id} 
-                         className={`flex flex-col items-center self-center transition-all hover:scale-[1.03] ${widths[idx]}`}
-                       >
-                         <SectionBox 
-                            title={section.name}
-                            notes={notes.filter(n => n.sectionId === section.id)}
-                            onAddNote={() => onAddNote(section.id)}
-                            onNoteDelete={onNoteDelete}
-                            onNoteUpdate={onNoteUpdate}
-                            onClick={() => onSectionClick(section.name)}
-                            framework={framework}
-                            className={`w-full py-10 shadow-2xl bg-white/95 backdrop-blur-md rounded-2xl border-2 ${idx === 0 ? 'border-blue-400' : 'border-slate-100'}`}
-                         />
-                       </div>
-                     );
-                  })}
-               </div>
-            </div>
-          </div>
-        );
-      case 'congruence':
-        return (
-          <div className="relative w-full max-w-6xl min-h-[700px] flex flex-col lg:flex-row items-center justify-between gap-12 px-8 py-16 bg-slate-50/30 rounded-[60px] border border-slate-100 shadow-inner">
-            {/* Inputs */}
-            <div className="flex flex-col gap-6 w-full lg:w-80">
-              <div className="text-[14px] font-black text-slate-400 uppercase tracking-widest px-4">The Input Layer</div>
-              <SectionBox 
-                title={framework.sections[0].name}
-                notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
-                onAddNote={() => onAddNote(framework.sections[0].id)}
-                onNoteDelete={onNoteDelete}
-                onNoteUpdate={onNoteUpdate}
-                onClick={() => onSectionClick(framework.sections[0].name)}
-                framework={framework}
-                className="border-indigo-400 bg-white shadow-2xl py-12"
-              />
-            </div>
-
-            <ArrowRight className="text-slate-300 rotate-90 lg:rotate-0 hidden lg:block" size={48} />
-
-            {/* Components Container */}
-            <div className="flex-1 w-full max-w-4xl p-12 bg-white rounded-[50px] shadow-2xl border-4 border-slate-50 relative grid grid-cols-1 md:grid-cols-2 gap-10">
-               <div className="absolute -top-6 left-1/2 -translate-x-1/2 bg-slate-900 text-white px-8 py-2 rounded-full text-[14px] font-black uppercase tracking-widest">Congruence Engine</div>
-               {framework.sections.slice(1, 5).map((section) => (
-                  <SectionBox 
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-4 gap-6'} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => {
+               const waterColors = ['bg-blue-50/20 border-blue-400', 'bg-sky-50/10 border-sky-300', 'bg-indigo-50/5 border-indigo-200', 'bg-slate-50/20 border-slate-300'];
+               return (
+                 <SectionBox 
                     key={section.id}
-                    title={section.name}
+                    title={`${idx === 0 ? '❄️ [Surface] ' : '❄️ [Deep] '}${section.name}`}
                     notes={notes.filter(n => n.sectionId === section.id)}
                     onAddNote={() => onAddNote(section.id)}
                     onNoteDelete={onNoteDelete}
                     onNoteUpdate={onNoteUpdate}
                     onClick={() => onSectionClick(section.name)}
                     framework={framework}
-                    className="min-h-[220px] bg-slate-50/50 hover:bg-white transition-colors"
-                  />
-               ))}
-            </div>
-
-            <ArrowRight className="text-slate-300 rotate-90 lg:rotate-0 hidden lg:block" size={48} />
-
-            {/* Outputs */}
-            <div className="flex flex-col gap-6 w-full lg:w-80">
-              <div className="text-[14px] font-black text-slate-400 uppercase tracking-widest px-4">The Output Layer</div>
-              <SectionBox 
-                title={framework.sections[5].name}
-                notes={notes.filter(n => n.sectionId === framework.sections[5].id)}
-                onAddNote={() => onAddNote(framework.sections[5].id)}
-                onNoteDelete={onNoteDelete}
-                onNoteUpdate={onNoteUpdate}
-                onClick={() => onSectionClick(framework.sections[5].name)}
-                framework={framework}
-                className="border-emerald-400 bg-white shadow-2xl py-12"
-              />
-            </div>
+                    className={`w-full h-full rounded-xl border-2 ${waterColors[idx % waterColors.length]} shadow-sm`}
+                 />
+               );
+            })}
+          </div>
+        );
+      case 'congruence':
+        return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-3 lg:grid-cols-6 gap-4'} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => {
+              const borders = ['border-indigo-400', 'border-blue-400', 'border-teal-400', 'border-amber-400', 'border-rose-400', 'border-emerald-400'];
+              return (
+                <SectionBox 
+                  key={section.id}
+                  title={section.name}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className={`w-full bg-white shadow-sm border-t-4 ${borders[idx % borders.length]} rounded-xl`}
+                />
+              );
+            })}
           </div>
         );
       case 'cultural-web':
         return (
-          <div className="relative w-[80vh] h-[80vh] flex items-center justify-center">
-            {/* Center Paradigm */}
-            <div className="z-20 w-64">
-              <SectionBox 
-                title={framework.sections[0].name}
-                notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
-                onAddNote={() => onAddNote(framework.sections[0].id)}
-                onNoteDelete={onNoteDelete}
-                onNoteUpdate={onNoteUpdate}
-                onClick={() => onSectionClick(framework.sections[0].name)}
-                framework={framework}
-                className="bg-indigo-600 text-white border-none shadow-[0_0_50px_rgba(79,70,229,0.3)]"
-                small
-              />
-            </div>
-
-            {/* Outer Elements */}
-            <div className="absolute inset-0">
-               {framework.sections.slice(1).map((section, idx) => {
-                  const angle = (idx * 60) * (Math.PI / 180);
-                  const radius = 300;
-                  const x = Math.cos(angle) * radius;
-                  const y = Math.sin(angle) * radius;
-                  return (
-                    <div 
-                      key={section.id}
-                      className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 group"
-                      style={{ transform: `translate(calc(-50% + ${x}px), calc(-50% + ${y}px))` }}
-                    >
-                       <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-32 h-1 bg-gradient-to-r from-transparent to-slate-100 -z-10 group-hover:bg-indigo-100 transition-colors" style={{ transform: `translate(-50%, -50%) rotate(${idx * 60 + 180}deg)`, originX: '0%' }} />
-                       <SectionBox 
-                          title={section.name}
-                          notes={notes.filter(n => n.sectionId === section.id)}
-                          onAddNote={() => onAddNote(section.id)}
-                          onNoteDelete={onNoteDelete}
-                          onNoteUpdate={onNoteUpdate}
-                          onClick={() => onSectionClick(section.name)}
-                          framework={framework}
-                          small
-                          className="w-48 bg-white/80 backdrop-blur border-slate-200"
-                       />
-                    </div>
-                  );
-               })}
-            </div>
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-3 gap-6'} min-h-[60vh]`}>
+             {framework.sections.map((section, idx) => (
+               <SectionBox 
+                  key={section.id}
+                  title={idx === 0 ? `★ ${section.name} (Core)` : section.name}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className={`w-full h-full rounded-xl shadow border-t-4 ${idx === 0 ? 'border-t-indigo-600 bg-indigo-50/5' : 'border-t-slate-200'}`}
+               />
+             ))}
           </div>
         );
-      case 'diamond':
+      case 'strategy-diamond':
         return (
-          <div className="relative w-[800px] h-[800px] flex items-center justify-center p-8">
-            <div className="absolute inset-0 flex items-center justify-center">
-              <div className="w-[500px] h-[500px] rotate-45 border-2 border-slate-200 bg-white/20" />
-            </div>
-            
-            <div className="relative z-10 w-full h-full">
-              {/* Top: Arenas */}
-              <div className="absolute top-0 left-1/2 -translate-x-1/2 w-64">
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-5 gap-4'} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => {
+              const colors = ['border-blue-500', 'border-indigo-500', 'border-emerald-500', 'border-amber-500', 'border-indigo-600 bg-indigo-50/10'];
+              return (
                 <SectionBox 
-                  title={framework.sections[0].name}
-                  notes={notes.filter(n => n.sectionId === framework.sections[0].id)}
-                  onAddNote={() => onAddNote(framework.sections[0].id)}
+                  key={section.id}
+                  title={section.name}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
                   onNoteDelete={onNoteDelete}
                   onNoteUpdate={onNoteUpdate}
-                  onClick={() => onSectionClick(framework.sections[0].name)}
+                  onClick={() => onSectionClick(section.name)}
                   framework={framework}
-                  className="bg-white/90 backdrop-blur shadow-lg border-t-4 border-t-blue-500"
+                  className={`w-full bg-white shadow-sm border-t-4 ${colors[idx % colors.length]} rounded-xl`}
                 />
-              </div>
-
-              {/* Left: Vehicles */}
-              <div className="absolute left-0 top-1/2 -translate-y-1/2 w-64">
-                <SectionBox 
-                  title={framework.sections[1].name}
-                  notes={notes.filter(n => n.sectionId === framework.sections[1].id)}
-                  onAddNote={() => onAddNote(framework.sections[1].id)}
-                  onNoteDelete={onNoteDelete}
-                  onNoteUpdate={onNoteUpdate}
-                  onClick={() => onSectionClick(framework.sections[1].name)}
-                  framework={framework}
-                  className="bg-white/90 backdrop-blur shadow-lg border-l-4 border-l-indigo-500"
-                />
-              </div>
-
-              {/* Right: Differentiators */}
-              <div className="absolute right-0 top-1/2 -translate-y-1/2 w-64">
-                <SectionBox 
-                  title={framework.sections[2].name}
-                  notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
-                  onAddNote={() => onAddNote(framework.sections[2].id)}
-                  onNoteDelete={onNoteDelete}
-                  onNoteUpdate={onNoteUpdate}
-                  onClick={() => onSectionClick(framework.sections[2].name)}
-                  framework={framework}
-                  className="bg-white/90 backdrop-blur shadow-lg border-r-4 border-r-emerald-500"
-                />
-              </div>
-
-              {/* Bottom: Staging */}
-              <div className="absolute bottom-0 left-1/2 -translate-x-1/2 w-64">
-                <SectionBox 
-                  title={framework.sections[3].name}
-                  notes={notes.filter(n => n.sectionId === framework.sections[3].id)}
-                  onAddNote={() => onAddNote(framework.sections[3].id)}
-                  onNoteDelete={onNoteDelete}
-                  onNoteUpdate={onNoteUpdate}
-                  onClick={() => onSectionClick(framework.sections[3].name)}
-                  framework={framework}
-                  className="bg-white/90 backdrop-blur shadow-lg border-b-4 border-b-amber-500"
-                />
-              </div>
-
-              {/* Center: Economic Logic */}
-              <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-56 z-20">
-                <SectionBox 
-                  title={framework.sections[4].name}
-                  notes={notes.filter(n => n.sectionId === framework.sections[4].id)}
-                  onAddNote={() => onAddNote(framework.sections[4].id)}
-                  onNoteDelete={onNoteDelete}
-                  onNoteUpdate={onNoteUpdate}
-                  onClick={() => onSectionClick(framework.sections[4].name)}
-                  framework={framework}
-                  className="bg-indigo-600 text-white border-none shadow-2xl scale-110"
-                  small
-                />
-              </div>
-            </div>
+              );
+            })}
           </div>
         );
       case 'bell-curve':
@@ -1951,47 +1462,44 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'matrix':
         return (
-          <div className="relative w-full max-w-2xl aspect-square flex items-center justify-center p-4 md:p-12 scale-[0.9] md:scale-100">
-            {/* Horizontal Axis */}
-            <div className="absolute left-0 right-0 top-1/2 h-1 bg-slate-200 -translate-y-1/2" />
-            <div className="absolute left-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">
-              {framework.matrixLabels?.x?.low || 'Low'}
-            </div>
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">
-              {framework.matrixLabels?.x?.high || 'High'}
-            </div>
-            
-            {/* Vertical Axis */}
-            <div className="absolute top-0 bottom-0 left-1/2 w-1 bg-slate-200 -translate-x-1/2" />
-            <div className="absolute left-1/2 bottom-2 -translate-x-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">
-              {framework.matrixLabels?.y?.low || 'Low'}
-            </div>
-            <div className="absolute left-1/2 top-2 -translate-x-1/2 text-[8px] font-black text-slate-400 uppercase tracking-widest">
-              {framework.matrixLabels?.y?.high || 'High'}
-            </div>
-
-            <div className="grid grid-cols-2 grid-rows-2 gap-4 md:gap-12 w-full h-full">
-              {framework.sections.map((section, idx) => {
-                const borderColors = ['border-blue-500', 'border-indigo-500', 'border-emerald-500', 'border-amber-500'];
-                return (
-                  <div key={section.id} className="relative z-10 flex items-center justify-center">
-                    <SectionBox 
-                      title={section.name}
-                      notes={notes.filter(n => n.sectionId === section.id)}
-                      onAddNote={() => onAddNote(section.id)}
-                      onNoteDelete={onNoteDelete}
-                      onNoteUpdate={onNoteUpdate}
-                      onClick={() => onSectionClick(section.name)}
-                      framework={framework}
-                      className={`shadow-lg bg-white/90 backdrop-blur-sm border-t-4 ${borderColors[idx]}`}
-                    />
-                  </div>
-                );
-              })}
-            </div>
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-4' : 'grid-cols-2 gap-8'} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => {
+              const borderColors = ['border-t-blue-500', 'border-t-indigo-500', 'border-t-emerald-500', 'border-t-amber-500'];
+              return (
+                <SectionBox 
+                  key={section.id}
+                  title={section.name}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className={`shadow-sm bg-white border-t-4 ${borderColors[idx % borderColors.length]}`}
+                />
+              );
+            })}
           </div>
         );
       case 'graph':
+        return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-4 gap-6'} min-h-[45vh]`}>
+             {framework.sections.map((section, idx) => (
+               <SectionBox 
+                  key={section.id}
+                  title={`📈 ${section.name}`}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className="w-full bg-white border border-slate-200 shadow-sm rounded-xl border-t-4 border-t-indigo-500"
+               />
+             ))}
+          </div>
+        );
+      case 'graph-legacy':
         return (
           <div className="relative w-full max-w-5xl aspect-video border-l-2 border-b-2 border-slate-200 p-4 md:p-8 flex items-end">
              <div className="absolute left-2 top-1/2 -rotate-90 text-[8px] font-black text-slate-400 uppercase tracking-widest">High Quality</div>
@@ -2046,6 +1554,27 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'x-matrix':
         return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'grid-cols-2 gap-6'} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => {
+              const colors = ['border-indigo-500', 'border-emerald-500', 'border-amber-500', 'border-rose-500'];
+              return (
+                <SectionBox 
+                    key={section.id}
+                    title={`🎯 ${section.name}`}
+                    notes={notes.filter(n => n.sectionId === section.id)}
+                    onAddNote={() => onAddNote(section.id)}
+                    onNoteDelete={onNoteDelete}
+                    onNoteUpdate={onNoteUpdate}
+                    onClick={() => onSectionClick(section.name)}
+                    framework={framework}
+                    className={`w-full bg-white border-t-4 ${colors[idx % colors.length]} shadow rounded-xl`}
+                />
+              );
+            })}
+          </div>
+        );
+      case 'x-matrix-legacy':
+        return (
           <div className="relative w-full max-w-5xl aspect-square bg-slate-900 border-[12px] border-slate-900 rounded-[80px] overflow-hidden shadow-2xl p-4">
             <div className="absolute inset-0 border-[20px] border-white/5 rounded-[70px] pointer-events-none" />
             
@@ -2076,6 +1605,24 @@ const FrameworkVisualizer: React.FC<{
           </div>
         );
       case 'fishbone':
+        return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-3 gap-6'} min-h-[60vh]`}>
+            {framework.sections.map((section, idx) => (
+              <SectionBox 
+                  key={section.id} 
+                  title={`🦴 ${section.name}`}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className={`bg-white shadow border-t-4 ${idx < 3 ? 'border-t-indigo-400' : 'border-t-rose-400'} rounded-xl`}
+              />
+            ))}
+          </div>
+        );
+      case 'fishbone-legacy':
         return (
           <div className="relative w-full max-w-7xl aspect-[21/9] flex items-center justify-center p-12 bg-slate-50/30 rounded-[80px] shadow-inner mb-20">
             {/* Spine */}
@@ -2129,6 +1676,24 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'tree':
         return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-4 gap-6'} min-h-[45vh]`}>
+             {framework.sections.map((section, idx) => (
+                <SectionBox 
+                    key={section.id}
+                    title={`🌿 ${section.name}`}
+                    notes={notes.filter(n => n.sectionId === section.id)}
+                    onAddNote={() => onAddNote(section.id)}
+                    onNoteDelete={onNoteDelete}
+                    onNoteUpdate={onNoteUpdate}
+                    onClick={() => onSectionClick(section.name)}
+                    framework={framework}
+                    className="w-full bg-white border border-slate-200 shadow-sm rounded-xl"
+                />
+             ))}
+          </div>
+        );
+      case 'tree-legacy':
+        return (
           <div className="flex flex-col md:flex-row items-center gap-8 md:gap-16 px-4 md:px-16 py-8 w-full overflow-x-auto">
              <div className="shrink-0 w-full md:w-auto flex justify-center">
                 <SectionBox 
@@ -2180,6 +1745,27 @@ const FrameworkVisualizer: React.FC<{
         );
       case 'bow-tie':
         return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-3' : 'md:grid-cols-5 gap-4'} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => {
+              const borderStyles = ['border-t-rose-500', 'border-t-orange-400', 'border-t-indigo-600', 'border-t-teal-400', 'border-t-emerald-500'];
+              return (
+                <SectionBox 
+                  key={section.id} 
+                  title={section.name}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className={`w-full bg-white border-t-4 ${borderStyles[idx % borderStyles.length]} rounded-xl shadow-sm`}
+                />
+              );
+            })}
+          </div>
+        );
+      case 'bow-tie-legacy':
+        return (
           <div className="relative w-full max-w-6xl flex flex-col md:flex-row items-center justify-between gap-4 md:gap-8 px-4 md:px-12 py-8">
             {/* Threats */}
             <div className="flex flex-col gap-4 w-full md:flex-1">
@@ -2211,7 +1797,7 @@ const FrameworkVisualizer: React.FC<{
 
             {/* Top Event */}
             <div className="flex flex-col gap-4 w-full md:w-auto">
-              <div className="w-full md:w-32 h-32 md:h-64 border-4 border-indigo-400 rounded-2xl md:rounded-[50%] flex items-center justify-center p-4 bg-indigo-50 shadow-2xl shadow-indigo-100">
+              <div className="w-full md:w-48 h-32 md:h-64 border-4 border-indigo-400 rounded-2xl flex items-center justify-center p-4 bg-indigo-50/50 shadow-2xl shadow-indigo-100">
                 <SectionBox 
                     title={framework.sections[2].name}
                     notes={notes.filter(n => n.sectionId === framework.sections[2].id)}
@@ -2255,6 +1841,27 @@ const FrameworkVisualizer: React.FC<{
           </div>
         );
       case 'force-field':
+        return (
+          <div className={`grid w-full max-w-6xl grid-cols-1 ${isMobile ? 'gap-4': 'md:grid-cols-2 gap-8'} min-h-[50vh]`}>
+            {framework.sections.map((section, idx) => {
+              const colors = ['border-t-emerald-500', 'border-t-rose-500'];
+              return (
+                <SectionBox 
+                  key={section.id}
+                  title={section.name}
+                  notes={notes.filter(n => n.sectionId === section.id)}
+                  onAddNote={() => onAddNote(section.id)}
+                  onNoteDelete={onNoteDelete}
+                  onNoteUpdate={onNoteUpdate}
+                  onClick={() => onSectionClick(section.name)}
+                  framework={framework}
+                  className={`w-full bg-white border-t-4 ${colors[idx % colors.length]} rounded-xl shadow-sm`}
+                />
+              );
+            })}
+          </div>
+        );
+      case 'force-field-legacy':
         return (
           <div className="relative w-full max-w-5xl min-h-[600px] bg-white border border-slate-200 rounded-3xl overflow-hidden p-4 md:p-8 flex flex-col gap-8">
             <div className="text-center">
@@ -2358,7 +1965,7 @@ const SectionBox: React.FC<{
 }) => {
   return (
     <div 
-      className={`group relative flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-indigo-400 hover:shadow-md cursor-pointer ${className}`}
+      className={`group relative flex flex-col rounded-xl border border-slate-200 bg-white shadow-sm transition-all hover:border-indigo-400 hover:shadow-md cursor-pointer ${small ? 'min-h-[110px]' : 'min-h-[180px]'} ${className}`}
       style={style}
       onClick={onClick}
     >
@@ -2376,8 +1983,8 @@ const SectionBox: React.FC<{
       </div>
       <div className={`flex flex-1 flex-wrap content-start gap-2 ${small ? 'p-1.5' : 'p-3'} overflow-y-auto min-h-0`}>
         {notes.length === 0 && (
-           <div className="flex w-full h-full items-center justify-center opacity-40">
-              <span className="text-[8px] font-bold uppercase tracking-widest text-slate-200">Empty Section</span>
+           <div className="flex w-full h-full items-center justify-center opacity-65 py-4">
+              <span className="text-[9px] font-black uppercase tracking-wider text-slate-400">Empty Section</span>
            </div>
         )}
         {notes.map(note => (
@@ -2414,20 +2021,20 @@ const StickyNoteCard: React.FC<{
     <motion.div
       initial={{ scale: 0.95, opacity: 0 }}
       animate={{ scale: 1, opacity: 1 }}
-      className={`relative ${compact ? 'h-16 w-16 p-1.5 rounded-md' : 'h-28 w-32 p-2 rounded-lg'} ${note.color} border border-black/5 flex flex-col shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 group/note`}
+      className={`relative ${compact ? 'min-h-[76px] w-[88px] p-1.5 rounded-md' : 'min-h-[114px] w-[138px] p-2.5 rounded-lg'} ${note.color} border border-black/5 flex flex-col shadow-sm transition-all hover:shadow-md hover:-translate-y-0.5 group/note`}
     >
       <div className="flex items-center justify-between mb-1">
          <div className="h-1 w-4 rounded-full bg-black/10" />
          <div className="flex items-center gap-1">
            <button 
             onClick={(e) => { e.stopPropagation(); setShowMenu(!showMenu); }}
-            className={`transition-all ${compact ? 'text-black/20' : 'text-black/0 group-hover/note:text-black/20 hover:!text-indigo-600'}`}
+            className="transition-all text-black/30 opacity-60 group-hover/note:opacity-100 hover:!text-indigo-600"
            >
             <ArrowRightLeft size={10} />
            </button>
            <button 
             onClick={(e) => { e.stopPropagation(); onDelete(); }}
-            className={`transition-all ${compact ? 'text-black/20' : 'text-black/0 group-hover/note:text-black/20 hover:!text-red-500'}`}
+            className="transition-all text-black/30 opacity-60 group-hover/note:opacity-100 hover:!text-rose-600"
            >
             <Trash2 size={10} />
            </button>
@@ -2455,7 +2062,7 @@ const StickyNoteCard: React.FC<{
       <textarea
         value={note.text}
         onChange={(e) => onUpdate({ text: e.target.value })}
-        className={`w-full flex-1 resize-none bg-transparent font-sans leading-tight focus:outline-none placeholder:text-black/20 ${compact ? 'text-[7px]' : 'text-[9px] font-semibold'}`}
+        className={`w-full flex-1 resize-none bg-transparent font-sans leading-tight focus:outline-none placeholder:text-black/20 overflow-y-auto break-words whitespace-pre-wrap ${compact ? 'text-[8.5px]' : 'text-[11.5px] font-semibold'}`}
         placeholder="Entry..."
       />
     </motion.div>
