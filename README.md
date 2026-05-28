@@ -1,6 +1,6 @@
 # Modern Chanakya
 
-**Modern Chanakya** is a high-fidelity, interactive strategic command center designed for leaders, founders, and consultants. It brings together over 100+ precision-crafted strategic frameworks onto a modern digital canvas (with suggestive notes)
+**Modern Chanakya** is a high-fidelity, interactive strategic command center designed for leaders, founders, and consultants. It brings together over 100+ precision-crafted strategic frameworks onto a modern digital canvas.
 
 ## 🚀 Experience Strategy in High Definition
 

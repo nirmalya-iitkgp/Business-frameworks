@@ -445,28 +445,7 @@ export default function App() {
             </button>
           )}
 
-          {/* User Clarification and Quick Action Banner */}
-          {selectedFramework && (
-            <div 
-              className={`absolute top-4 ${isSidebarOpen ? 'left-4 animate-in slide-in-from-left duration-200' : 'left-16'} right-56 z-20 hidden sm:flex items-center justify-between gap-4 rounded-xl border border-slate-200/80 bg-white/90 backdrop-blur px-4 py-2 shadow-lg shadow-slate-200/30 transition-all`}
-            >
-              <div className="flex items-center gap-2 overflow-hidden">
-                <span className="text-[9px] font-black text-rose-500 bg-rose-50 border border-rose-100 px-1.5 py-0.5 rounded uppercase tracking-wider shrink-0 select-none">
-                  Quick Focus
-                </span>
-                <span className="text-[11.5px] font-semibold text-slate-600 truncate">
-                  {selectedFramework.description} Add custom ideas with <span className="font-black text-indigo-600 font-mono">+</span>.
-                </span>
-              </div>
-              <button
-                onClick={addStarterNotes}
-                className="shrink-0 flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[9px] px-3 py-1.5 rounded-lg shadow-md shadow-indigo-150 border border-indigo-600 hover:-translate-y-0.5 transition-all uppercase tracking-wider"
-                title="Populate framework boxes with standard text examples for inspiration"
-              >
-                ✨ Auto-Fill Examples
-              </button>
-            </div>
-          )}
+
 
           {/* Canvas Area */}
           <div 
@@ -619,24 +598,33 @@ export default function App() {
         </main>
       </div>
 
-      {/* Ticker Tape Footer */}
-      <footer className="h-8 border-t border-slate-200 bg-white overflow-hidden flex items-center shrink-0">
-        <motion.div 
-          animate={{ x: ["100%", "-100%"] }}
-          transition={{ duration: 60, repeat: Infinity, ease: "linear" }}
-          className="whitespace-nowrap flex items-center gap-12 text-[10px] text-slate-400 font-bold uppercase tracking-[0.2em]"
-        >
-          <span>LEGAL DISCLAIMER: ALL STRATEGY FRAMEWORKS PROVIDED ARE FOR EDUCATIONAL AND PLANNING PURPOSES ONLY</span>
-          <span>SYSTEMS DO NOT GUARANTEE MARKET OUTCOMES OR FINANCIAL RESULTS</span>
-          <span>MODERN CHANAKYA PLATFORM IS NOT LIABLE FOR BUSINESS DECISIONS MADE BASED ON THESE VISUALIZATIONS</span>
-          <span>CONSULT WITH LEGAL AND FINANCIAL ADVISORS BEFORE IMPLEMENTING MAJOR STRATEGIC SHIFTS</span>
-          <span>INTERNAL USE ONLY</span>
-          <span>BUILT BY NIRMALYA PANIGRAHI</span>
-          {/* Duplicate for seamless loop */}
-          <span>LEGAL DISCLAIMER: ALL STRATEGY FRAMEWORKS PROVIDED ARE FOR EDUCATIONAL AND PLANNING PURPOSES ONLY</span>
-          <span>SYSTEMS DO NOT GUARANTEE MARKET OUTCOMES OR FINANCIAL RESULTS</span>
-          <span>MODERN CHANAKYA PLATFORM IS NOT LIABLE FOR BUSINESS DECISIONS MADE BASED ON THESE VISUALIZATIONS</span>
-        </motion.div>
+      {/* Elegant Instruction & Quick Action Bottom Footer */}
+      <footer className="h-11 border-t border-slate-200 bg-white/95 backdrop-blur-sm px-4 flex items-center justify-between shrink-0 text-xs shadow-inner">
+        {selectedFramework ? (
+          <div className="flex items-center justify-between w-full gap-4">
+            <div className="flex items-center gap-2 overflow-hidden">
+              <span className="text-[9px] font-black text-indigo-600 bg-indigo-50 border border-indigo-100 px-2 py-0.5 rounded uppercase tracking-wider shrink-0 select-none">
+                Active Framework
+              </span>
+              <span className="text-[11.5px] font-semibold text-slate-600 truncate">
+                {selectedFramework.description} <span className="text-[10px] text-slate-400 font-normal"> (Add ideas using <span className="font-extrabold text-indigo-600 font-mono">+</span> inside core boxes)</span>
+              </span>
+            </div>
+            <button
+              onClick={addStarterNotes}
+              className="shrink-0 flex items-center gap-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[9.5px] px-3 py-1.5 rounded-lg border border-indigo-600 active:scale-[0.97] transition-all uppercase tracking-wider cursor-pointer shadow-indigo-100 shadow"
+              title="Instantly auto-fill relevant starter text templates into framework boxes"
+            >
+              ✨ Auto-Fill Examples
+            </button>
+          </div>
+        ) : (
+          <div className="flex items-center gap-2 text-slate-400 text-[10.5px] font-bold uppercase tracking-wider">
+            <span>Modern Chanakya strategic canvas</span>
+            <span className="text-slate-200">/</span>
+            <span className="font-normal text-slate-400">Select any strategic framework from the index to start visualization</span>
+          </div>
+        )}
       </footer>
     </div>
   );
